@@ -64,8 +64,8 @@ using a proxy through `ANTHROPIC_AUTH_TOKEN`.
 
 ## Connect a CLIProxyAPI hub
 
-To see pooled accounts, open **Settings → Providers → Usage providers → Add hub**. Choose the
-environment that will connect to the hub and enter its URL and management key.
+To see pooled accounts, open **Settings → Providers → Usage providers → Add source**. Choose the
+environment that will connect to the hub, select **CLIProxyAPI**, and enter its URL and management key.
 
 The accounts appear under **Usage → Limits**. Codex accounts show banked reset credits; select an
 account and choose **Use reset** to redeem one. No hub plugin is required.
@@ -73,3 +73,22 @@ account and choose **Use reset** to redeem one. No hub plugin is required.
 This connection supplies usage information; configure
 the provider separately to send agent requests through the hub. Remove the hub from the same
 settings section when you no longer need it.
+
+## Connect Quotio
+
+In **Settings → Providers → Usage providers → Add source**, select **Quotio** and enter its URL
+and Bearer token (the value of `QUOTIO_SERVER_TOKEN` used when starting `quotio serve`). The token
+is kept in the selected T3 server's secret store. Read-only access is sufficient; `--manage` is
+not required. T3 reads `/v1/usage`; Quotio refreshes its own upstream data.
+
+The connection originates from the selected **T3 server**, not your browser or phone. Quotio
+binds to loopback: `http://127.0.0.1:8317` works when both servers run on the same machine. For a
+different machine, provide a secured forwarding endpoint reachable by the T3 server.
+
+Codex and Claude subscription percentages appear by account in **Usage → Limits**. Unknown,
+unlimited, disabled, non-percentage, failed, and stale readings do not become quota bars. T3
+excludes windows at least five minutes old (Quotio's default cache lifetime) and reports a
+notice; a newly generated report does not make old upstream data fresh. Token and cost consumption
+are not subscription quota. Other providers and reset-credit redemption are not supported by this
+connection. It does not route agent requests. Remove the source in the same settings section to
+delete its stored token and stop polling.

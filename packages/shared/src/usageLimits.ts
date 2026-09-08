@@ -282,10 +282,14 @@ export function collectLimitAccounts(
         : source.label;
       for (const account of source.accounts) {
         if (limitsNotice(account.usageLimits) !== null) continue;
-        merge(accountKey(account.driver, account.email) ?? `${source.id}:${account.id}`, {
-          key: `${source.id}:${account.id}`,
+        const sourceAccountKey =
+          source.kind === "quotio"
+            ? `${environmentId}:${source.id}:${account.id}`
+            : `${source.id}:${account.id}`;
+        merge(accountKey(account.driver, account.email) ?? sourceAccountKey, {
+          key: sourceAccountKey,
           driver: account.driver,
-          displayName: account.email ? null : account.id.replace(/\.json$/i, ""),
+          displayName: account.label ?? (account.email ? null : account.id.replace(/\.json$/i, "")),
           email: account.email,
           plan: account.plan,
           accentColor: undefined,
@@ -703,8 +707,9 @@ export function collectProviderUsageLimits(
       accounts.push({
         id: `${source.id}:${account.id}`,
         driver: account.driver,
-        label: `${source.label} · ${account.id}`,
-        sourceLabel: "CLI Proxy",
+        label: `${source.label} · ${account.label ?? account.id}`,
+        sourceLabel: source.kind === "quotio" ? "Quotio" : "CLI Proxy",
+        ...(account.label ? { displayName: account.label } : {}),
         ...(account.usageLimits.resetCredits?.nextCreditId
           ? {
               resetCreditInput: {

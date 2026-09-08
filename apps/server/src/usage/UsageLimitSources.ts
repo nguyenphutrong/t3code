@@ -36,6 +36,7 @@ import * as Stream from "effect/Stream";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { makeCliproxyApi } from "./cliproxyApi.ts";
+import { makeQuotioApi } from "./quotioApi.ts";
 
 export class UsageLimitSources extends Context.Service<
   UsageLimitSources,
@@ -62,6 +63,7 @@ function sourceLabel(id: string, config: UsageLimitSourceConfig): string {
 
 export const make = Effect.gen(function* () {
   const api = yield* makeCliproxyApi;
+  const quotio = yield* makeQuotioApi;
   const settingsService = yield* ServerSettingsService;
   const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
   const stateRef = yield* Ref.make<ReadonlyArray<UsageLimitSourceSnapshot>>([]);
@@ -77,14 +79,25 @@ export const make = Effect.gen(function* () {
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
     const base = { id, kind: config.kind, label: sourceLabel(id, config), checkedAt } as const;
     if (config.managementKey.length === 0) {
-      return { ...base, accounts: [], error: "No management key configured." };
+      return {
+        ...base,
+        accounts: [],
+        error:
+          config.kind === "quotio"
+            ? "No Bearer token configured."
+            : "No management key configured.",
+      };
     }
-    const accounts = yield* api.readAccounts(config).pipe(Effect.result);
+    const accounts = yield* (
+      config.kind === "quotio"
+        ? quotio.readAccounts(config)
+        : api.readAccounts(config).pipe(Effect.map((accounts) => ({ accounts })))
+    ).pipe(Effect.result);
     if (accounts._tag === "Failure") {
       yield* Effect.logDebug("usage limit source read failed", { id, cause: accounts.failure });
       return { ...base, accounts: [], error: accounts.failure.detail };
     }
-    return { ...base, accounts: accounts.success };
+    return { ...base, ...accounts.success };
   });
 
   const publish = (next: ReadonlyArray<UsageLimitSourceSnapshot>) =>
@@ -126,6 +139,11 @@ export const make = Effect.gen(function* () {
       if (!config?.enabled || !config.managementKey) {
         return yield* new UsageLimitSourceError({
           detail: "The usage limit source is missing or disabled.",
+        });
+      }
+      if (config.kind !== "cliproxy") {
+        return yield* new UsageLimitSourceError({
+          detail: "This usage source does not support reset credits.",
         });
       }
       const result = yield* api.consume(config, input.accountId, input.creditId);

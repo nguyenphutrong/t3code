@@ -863,6 +863,44 @@ describe("/usage-limits", () => {
     },
   ];
 
+  it("presents Quotio account labels without email inference or reset-credit actions across clients and environments", () => {
+    const source = {
+      ...sources[0]!,
+      kind: "quotio" as const,
+      accounts: [
+        { id: "fingerprint", label: "Work", driver: selected.driver, usageLimits: limits },
+      ],
+      error: "Another account failed to refresh.",
+    };
+    const report = collectProviderUsageLimits(selected.instanceId, [selected], [source], now);
+    expect(report?.accounts.find((account) => account.id === "hub:fingerprint")).toMatchObject({
+      label: "Accounts · Work",
+      displayName: "Work",
+      sourceLabel: "Quotio",
+    });
+    expect(
+      report?.accounts.find((account) => account.id === "hub:fingerprint")?.resetCreditInput,
+    ).toBeUndefined();
+    const presentations = new Map(
+      ["a", "b"].map((id) => [
+        EnvironmentId.make(id),
+        {
+          entry: { target: { label: id } },
+          serverConfig: { usageLimitSources: [source] },
+        },
+      ]),
+    );
+    const accounts = collectLimitAccounts(presentations);
+    expect(accounts).toHaveLength(2);
+    expect(new Set(accounts.map((account) => account.key)).size).toBe(2);
+    expect(
+      accounts.every(
+        (account) => account.displayName === "Work" && !account.email && !account.redeem,
+      ),
+    ).toBe(true);
+    expect(collectLimitNotices(presentations)).toHaveLength(2);
+  });
+
   it("uses hub credit balances and redemption targets in the composer, including native duplicates", () => {
     const hubs = sources.map((source) => ({
       ...source,

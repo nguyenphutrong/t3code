@@ -6,6 +6,7 @@ import {
   resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
+  UsageLimitSourceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
@@ -27,6 +28,7 @@ import { resolveProviderInstanceTerminalEnvironment } from "./terminal/Manager.t
 
 const decodeSettingsPatch = Schema.decodeUnknownEffect(ServerSettingsPatch);
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
+const encodeServerSettings = Schema.encodeEffect(Schema.fromJsonString(ServerSettings));
 
 const makeServerSettingsLayer = () =>
   ServerSettingsModule.layer.pipe(
@@ -75,6 +77,42 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect(
+    "stores Quotio tokens separately, redacts client settings, preserves markers and removes secrets",
+    () =>
+      Effect.gen(function* () {
+        const settings = yield* ServerSettingsModule.ServerSettingsService;
+        const config = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const id = UsageLimitSourceId.make("quotio-test");
+        const token = "quotio-test-secret";
+        const saved = yield* settings.updateSettings({
+          usageLimitSources: {
+            [id]: {
+              kind: "quotio",
+              url: "http://127.0.0.1:8317",
+              managementKey: token,
+              enabled: true,
+            },
+          },
+        });
+        assert.equal(saved.usageLimitSources[id]?.managementKey, token);
+        assert.notInclude(yield* fs.readFileString(config.settingsPath), token);
+        const client = ServerSettingsModule.redactServerSettingsForClient(saved);
+        assert.notInclude(yield* encodeServerSettings(client), token);
+        yield* settings.updateSettings({ usageLimitSources: client.usageLimitSources });
+        assert.equal((yield* settings.getSettings).usageLimitSources[id]?.managementKey, token);
+        yield* settings.updateSettings({ usageLimitSources: { [id]: null } });
+        assert.isUndefined((yield* settings.getSettings).usageLimitSources[id]);
+        const secretStore = yield* ServerSecretStore.make;
+        assert.isTrue(
+          Option.isNone(
+            yield* secretStore.get(ServerSettingsModule.usageLimitSourceSecretName(id)),
+          ),
+        );
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("preserves context when reading a provider environment secret fails", () => {
     const platformCause = PlatformError.systemError({
       _tag: "PermissionDenied",
