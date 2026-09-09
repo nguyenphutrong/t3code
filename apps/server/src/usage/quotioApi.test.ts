@@ -73,6 +73,82 @@ function fixture(body: unknown = report(), status = 200) {
 }
 
 describe("Quotio usage API", () => {
+  it.effect("publishes read-only reset credits with upstream totals and nullable expiry", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(now);
+      for (const count of [0, 3]) {
+        const body = report();
+        const providers = [...body.providers];
+        providers[0] = {
+          ...body.providers[0]!,
+          reset_credits: {
+            available_count: count,
+            earliest_expires_at: null,
+            fetched_at: "2026-09-08T11:59:00Z",
+            source: "codex_api",
+          },
+        };
+        const result = yield* (yield* fixture({ ...body, providers }).api).readAccounts(config);
+        expect(result.accounts[0]?.usageLimits.resetCredits).toEqual({ availableCount: count });
+        expect(result.accounts[1]?.usageLimits.resetCredits).toBeUndefined();
+      }
+    }),
+  );
+
+  it("expires credit observations independently of fresh quota and report timestamps", () => {
+    for (const [fetchedAt, expiresAt, valid] of [
+      ["2026-09-08T11:55:01Z", "2026-10-01T00:00:00Z", true],
+      ["2026-09-08T11:55:00Z", "2026-10-01T00:00:00Z", false],
+      ["2026-09-08T12:00:01Z", null, false],
+      ["2026-09-08T11:59:00Z", "2026-09-08T12:00:00Z", false],
+    ] as const) {
+      const body = report();
+      const providers = [...body.providers];
+      providers[0] = {
+        ...body.providers[0]!,
+        reset_credits: {
+          available_count: 2,
+          earliest_expires_at: expiresAt,
+          fetched_at: fetchedAt,
+          source: "codex_api",
+        },
+      };
+      const limits = quotioReportToAccounts({ ...body, providers }, now).accounts[0]!.usageLimits;
+      expect(limits.windows).toHaveLength(3);
+      expect(limits.resetCredits).toEqual(
+        valid
+          ? {
+              availableCount: 2,
+              nextExpiresAt: "2026-10-01T00:00:00.000Z",
+            }
+          : undefined,
+      );
+    }
+  });
+
+  it.effect("keeps quota on a credits-only diagnostic but excludes real quota failures", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(now);
+      for (const quotaFailure of [false, true]) {
+        const body = report({
+          failures: [{ provider: "codex", code: "timeout", message: "timeout" }],
+        });
+        const providers = [...body.providers];
+        providers[0] = {
+          ...body.providers[0]!,
+          diagnostics: [
+            { source: "codex_reset_credits", code: "timeout" },
+            ...(quotaFailure ? [{ source: "codex_usage", code: "timeout" }] : []),
+          ],
+        };
+        const result = yield* (yield* fixture({ ...body, providers }).api).readAccounts(config);
+        expect(result.accounts[0]?.usageLimits.windows).toHaveLength(quotaFailure ? 0 : 3);
+        expect(result.accounts[0]?.usageLimits.resetCredits).toBeUndefined();
+        expect(result.error).toBeDefined();
+      }
+    }),
+  );
+
   it.effect(
     "reads v1 usage with Bearer auth, maps every subscription window and validates the published snapshot",
     () =>

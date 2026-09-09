@@ -1,4 +1,5 @@
 import {
+  NonNegativeInt,
   ProviderDriverKind,
   TrimmedNonEmptyString,
   UsageLimitSourceError,
@@ -40,6 +41,24 @@ const UsageReport = Schema.Struct({
     Schema.Struct({
       provider: TrimmedNonEmptyString,
       account_ref: Schema.optional(Schema.NullOr(AccountRef)),
+      reset_credits: Schema.optional(
+        Schema.NullOr(
+          Schema.Struct({
+            available_count: NonNegativeInt,
+            earliest_expires_at: Schema.NullOr(Timestamp),
+            fetched_at: Timestamp,
+            source: Schema.String,
+          }),
+        ),
+      ),
+      diagnostics: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            source: Schema.String,
+            code: Schema.String,
+          }),
+        ),
+      ),
       account: Schema.Struct({
         id: TrimmedNonEmptyString,
         label: TrimmedNonEmptyString,
@@ -102,7 +121,15 @@ export function quotioReportToAccounts(report: typeof UsageReport.Type, now: num
       (failure) =>
         failure.provider === provider.provider &&
         (!failure.account_ref ||
-          failure.account_ref.id === (provider.account_ref?.id ?? provider.account.id)),
+          failure.account_ref.id === (provider.account_ref?.id ?? provider.account.id)) &&
+        !provider.diagnostics?.some(
+          (diagnostic) =>
+            diagnostic.source === "codex_reset_credits" &&
+            diagnostic.code === failure.code &&
+            !provider.diagnostics?.some(
+              (other) => other.source !== "codex_reset_credits" && other.code === failure.code,
+            ),
+        ),
     );
     const windows: UsageLimitSourceAccount["usageLimits"]["windows"][number][] = [];
     const fetched: number[] = [];
@@ -150,6 +177,15 @@ export function quotioReportToAccounts(report: typeof UsageReport.Type, now: num
     }
     if (windows.length === 0 && !failed)
       notices.push(`${label}: No fresh subscription percentage windows reported.`);
+    const credits = provider.provider === "codex" ? provider.reset_credits : undefined;
+    const creditAge = credits ? now - Date.parse(credits.fetched_at) : -1;
+    const validCredits =
+      credits &&
+      !failed &&
+      !provider.diagnostics?.some((diagnostic) => diagnostic.source === "codex_reset_credits") &&
+      creditAge >= 0 &&
+      creditAge < MAX_WINDOW_AGE_MS &&
+      (!credits.earliest_expires_at || Date.parse(credits.earliest_expires_at) > now);
     accounts.push({
       id: JSON.stringify([provider.provider, provider.account_ref?.id ?? provider.account.id]),
       driver: ProviderDriverKind.make(provider.provider === "codex" ? "codex" : "claudeAgent"),
@@ -160,6 +196,20 @@ export function quotioReportToAccounts(report: typeof UsageReport.Type, now: num
           DateTime.makeUnsafe(fetched.length ? Math.min(...fetched) : now),
         ),
         windows,
+        ...(validCredits
+          ? {
+              resetCredits: {
+                availableCount: credits.available_count,
+                ...(credits.earliest_expires_at
+                  ? {
+                      nextExpiresAt: DateTime.formatIso(
+                        DateTime.makeUnsafe(credits.earliest_expires_at),
+                      ),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
         ...(failed
           ? {
               unavailable: {
