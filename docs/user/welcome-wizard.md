@@ -46,6 +46,12 @@ terminal metadata while the terminal process can use them.
 
 ## Import your projects
 
+After setup, open the command menu (Cmd+K on macOS, Ctrl+K on Windows/Linux)
+and choose **Import sessions** to import Codex or Claude Code history from your
+connected computers. Select the folders to import. T3 Code reuses a project
+with the same directory on that computer, or creates one if it does not exist.
+You do not need to repeat setup.
+
 T3 Code finds directories that Claude Code or Codex has used. Git repositories
 are listed first, newest activity on top. When the remote is on GitHub, the
 group shows the repository as `owner/name`. Clones with the same remote share
