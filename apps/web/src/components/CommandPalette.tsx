@@ -64,7 +64,7 @@ import {
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
 
-import { ImportSessionsDialog } from "./onboarding/WelcomeWizard";
+import { ImportSessionsDialog } from "./ImportSessionsDialog";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";

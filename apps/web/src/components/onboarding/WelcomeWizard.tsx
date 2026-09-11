@@ -949,58 +949,16 @@ function AgentInstallTerminal({
 
 // ── Step 4: import ───────────────────────────────────────────
 
-/** Import into existing or new projects without changing onboarding completion. */
-export function ImportSessionsDialog({ onClose }: { readonly onClose: () => void }) {
-  const { environments } = useEnvironments();
-  const environmentIds = useMemo(
-    () => environments.map((environment) => environment.environmentId),
-    [environments],
-  );
-  const scans = useProjectScans(environmentIds);
-  const [isImporting, setIsImporting] = useState(false);
-  const onDone = useCallback(async () => {
-    onClose();
-    return true;
-  }, [onClose]);
-
-  return (
-    <Dialog
-      open
-      disablePointerDismissal
-      onOpenChange={(open, event) => {
-        if (isImporting) event.cancel();
-        else if (!open) onClose();
-      }}
-    >
-      <DialogPopup
-        className="max-w-xl overflow-x-hidden overflow-y-auto p-6"
-        showCloseButton={!isImporting}
-      >
-        <DialogTitle className="sr-only">Import sessions</DialogTitle>
-        <ImportStep
-          scans={scans}
-          isImporting={isImporting}
-          setIsImporting={setIsImporting}
-          onDone={onDone}
-          standalone
-        />
-      </DialogPopup>
-    </Dialog>
-  );
-}
-
 function ImportStep({
   scans,
   isImporting,
   setIsImporting,
   onDone,
-  standalone = false,
 }: {
   readonly scans: ReturnType<typeof useProjectScans>;
   readonly isImporting: boolean;
   readonly setIsImporting: (value: boolean) => void;
   readonly onDone: (projectRef?: ScopedProjectRef) => Promise<boolean>;
-  readonly standalone?: boolean;
 }) {
   const { environments } = useEnvironments();
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
@@ -1211,7 +1169,7 @@ function ImportStep({
         </div>
         <div className="flex justify-end">
           <Button variant="ghost-muted" onClick={() => void onDone()}>
-            {standalone ? "Cancel" : "Do not import projects"}
+            Do not import projects
           </Button>
         </div>
       </div>
@@ -1220,12 +1178,8 @@ function ImportStep({
 
   return (
     <StepShell
-      title={standalone ? "Import sessions" : "Choose your projects"}
-      description={
-        standalone
-          ? "Import recent Codex and Claude Code sessions. Select folders below; matching projects are reused and missing projects are created automatically."
-          : "Import projects and conversations from your selected computers."
-      }
+      title="Choose your projects"
+      description="Import projects and conversations from your selected computers."
     >
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -1315,11 +1269,7 @@ function ImportStep({
           disabled={isImporting}
           onClick={importError ? finishAfterImport : () => void onDone()}
         >
-          {importError
-            ? "Continue without the rest"
-            : standalone
-              ? "Cancel"
-              : "Do not import projects"}
+          {importError ? "Continue without the rest" : "Do not import projects"}
         </Button>
         <Button
           autoFocus
