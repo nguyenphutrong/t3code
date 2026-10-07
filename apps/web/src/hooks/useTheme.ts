@@ -140,6 +140,15 @@ function getSpaceThemeOverlay(): Theme | null {
     : null;
 }
 
+/**
+ * A Space theme swaps the palette but keeps the user's Color scheme, unless the
+ * Space picked the Light or Dark theme, which is itself a scheme choice.
+ */
+function resolveAppearanceMode(storedTheme: Theme, spaceTheme: Theme | null): ThemePreferenceMode {
+  if (spaceTheme === "light" || spaceTheme === "dark") return spaceTheme;
+  return readAppearanceModePreference(storedTheme);
+}
+
 /** Apply a device-local Space theme without changing global preferences. */
 export function setSpaceThemeOverlay(theme: string | null) {
   if (requestedSpaceTheme === theme) return;
@@ -344,10 +353,8 @@ function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview
     return;
   }
   const spaceThemeOverlay = getSpaceThemeOverlay();
+  const appearanceMode = resolveAppearanceMode(theme, spaceThemeOverlay);
   theme = spaceThemeOverlay ?? theme;
-  const appearanceMode = spaceThemeOverlay
-    ? (getThemePreferenceMode(theme) ?? "system")
-    : readAppearanceModePreference(theme);
   const followSystem = appearanceMode === "system";
   const systemDark = followSystem ? getSystemDark() : false;
   const themeHalves = spaceThemeOverlay ? null : readStoredThemeHalves();
@@ -442,10 +449,9 @@ function getSnapshot(): ThemeSnapshot {
   if (!snapshotStale && lastSnapshot) return lastSnapshot;
   snapshotStale = false;
   const spaceThemeOverlay = getSpaceThemeOverlay();
-  const theme = spaceThemeOverlay ?? getStored();
-  const appearanceMode = spaceThemeOverlay
-    ? (getThemePreferenceMode(theme) ?? "system")
-    : readAppearanceModePreference(theme);
+  const storedTheme = getStored();
+  const theme = spaceThemeOverlay ?? storedTheme;
+  const appearanceMode = resolveAppearanceMode(storedTheme, spaceThemeOverlay);
   const followSystem = appearanceMode === "system";
   const systemDark = followSystem ? getSystemDark() : false;
   const themeHalves = spaceThemeOverlay ? null : readStoredThemeHalves();
@@ -478,13 +484,8 @@ function getServerSnapshot() {
 }
 
 function handleSystemAppearanceChange() {
-  const spaceThemeOverlay = getSpaceThemeOverlay();
   const storedTheme = getStored();
-  if (
-    (spaceThemeOverlay
-      ? (getThemePreferenceMode(spaceThemeOverlay) ?? "system")
-      : readAppearanceModePreference(storedTheme)) === "system"
-  ) {
+  if (resolveAppearanceMode(storedTheme, getSpaceThemeOverlay()) === "system") {
     applyTheme(storedTheme, { suppressTransitions: true });
   }
   emitChange();
