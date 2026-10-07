@@ -122,6 +122,12 @@ type WhenToken =
 
 export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+b", command: "sidebar.toggle" },
+  { key: "alt+shift+arrowright", command: "spaces.next", when: "!terminalFocus && !editableFocus" },
+  {
+    key: "alt+shift+arrowleft",
+    command: "spaces.previous",
+    when: "!terminalFocus && !editableFocus",
+  },
   { key: "mod+[", command: "navigation.back", when: "!terminalFocus" },
   { key: "mod+]", command: "navigation.forward", when: "!terminalFocus" },
   { key: "mod+j", command: "terminal.toggle" },

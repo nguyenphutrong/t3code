@@ -1,3 +1,4 @@
+import { SpacesControl } from "../spaces/SpacesControl";
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
 import { useAuth, useUser } from "@clerk/expo";
 import { useNavigation } from "@react-navigation/native";
@@ -166,6 +167,7 @@ function SettingsIndexSections() {
             target="SettingsProjectOverview"
           />
         ) : null}
+        <SpacesControl settings />
         <SettingsRow icon="folder" label="Organization" target="SettingsOrganization" />
         <SettingsRow icon="text.bubble" label="Thread behavior" target="SettingsThreads" />
         <SettingsRow icon="arrow.turn.left.up" label="Follow-ups" target="SettingsFollowUp" />

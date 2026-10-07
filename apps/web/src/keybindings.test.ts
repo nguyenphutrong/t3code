@@ -182,6 +182,33 @@ const DEFAULT_BINDINGS = compile([
   },
 ]);
 
+it("keeps Space navigation out of text editing and terminal shortcuts", () => {
+  for (const key of ["ArrowLeft", "ArrowRight"]) {
+    const input = event({ key, altKey: true, shiftKey: true });
+    assert.equal(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "MacIntel",
+        context: { editableFocus: false, terminalFocus: false },
+      }),
+      key === "ArrowLeft" ? "spaces.previous" : "spaces.next",
+    );
+    assert.equal(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "MacIntel",
+        context: { editableFocus: true, terminalFocus: false },
+      }),
+      null,
+    );
+    assert.equal(
+      resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
+      null,
+    );
+  }
+});
+
 describe("effectiveShortcutsForCommand", () => {
   it("passes only effective preview shortcuts to the desktop bridge", () => {
     const reopen = modShortcut("t", { shiftKey: true });

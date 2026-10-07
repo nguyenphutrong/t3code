@@ -1,3 +1,5 @@
+import { SpacesControl } from "../spaces/SpacesControl";
+import { useSpaceEntities, useSpacePendingTasks } from "../../state/spaces";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
@@ -30,8 +32,9 @@ import { getConnectionAwareBrandHeaderOptions } from "./WorkspaceConnectionTitle
 export function HomeRouteScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { layout, panes } = useAdaptiveWorkspaceLayout();
-  const projects = useProjects();
-  const threads = useNavigationThreadShells();
+  const allProjects = useProjects();
+  const allThreads = useNavigationThreadShells();
+  const { projects, threads } = useSpaceEntities(allProjects, allThreads);
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const navigation = useNavigation();
@@ -71,7 +74,7 @@ export function HomeRouteScreen() {
     regenerateThreadTitle,
     unsettleThread,
   } = useThreadListActions();
-  const pendingTasks = usePendingNewTasks();
+  const pendingTasks = useSpacePendingTasks(usePendingNewTasks());
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(() => {
     const connectionStateByEnvironmentId = new Map(
@@ -206,6 +209,7 @@ export function HomeRouteScreen() {
           onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
         />
 
+        <SpacesControl onSelectThread={handleSelectThread} />
         <HomeScreen
           catalogState={catalogState}
           environments={environments}

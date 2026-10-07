@@ -1,3 +1,5 @@
+import { assignThreadSpace, resolveProjectSpace } from "@t3tools/client-runtime/state/spaces";
+import { useMobileSpaces } from "../../state/spaces";
 import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
@@ -199,6 +201,7 @@ export function NewTaskDraftScreen(props: {
 }) {
   const projects = useProjects();
   const flow = useNewTaskFlow();
+  const { state: spaces, update: updateSpaces } = useMobileSpaces();
   const navigation = useNavigation();
   const {
     consumeShare,
@@ -1332,9 +1335,27 @@ export function NewTaskDraftScreen(props: {
     }
     // Persist before clearing the draft or leaving its editor. This only waits
     // for the local outbox write; server and worktree setup run on the thread.
+    const creationSpaceId =
+      draft.project?.spaceId === undefined ? spaces.activeSpaceId : draft.project.spaceId;
     flow.setSubmitting(true);
     try {
       await enqueueThreadOutboxMessage(message);
+      const creation = message.creation;
+      if (!editingPendingTask && creation) {
+        updateSpaces((current) =>
+          creationSpaceId === null ||
+          resolveProjectSpace(current, {
+            environmentId: message.environmentId,
+            projectId: creation.projectId,
+          }) === creationSpaceId
+            ? current
+            : assignThreadSpace(
+                current,
+                { environmentId: message.environmentId, threadId: message.threadId },
+                creationSpaceId,
+              ),
+        );
+      }
     } catch (error) {
       Alert.alert(
         "Could not queue task",

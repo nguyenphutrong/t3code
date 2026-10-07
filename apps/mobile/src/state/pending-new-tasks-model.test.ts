@@ -1,9 +1,16 @@
 import { describe, expect, it } from "@effect/vitest";
-import { CommandId, EnvironmentId, MessageId, ProjectId, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_SPACES_STATE,
+  CommandId,
+  EnvironmentId,
+  MessageId,
+  ProjectId,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import type { QueuedThreadMessage } from "./thread-outbox-model";
 import type { ComposerDraft } from "./use-composer-drafts";
-import { buildPendingNewTasks } from "./pending-new-tasks-model";
+import { buildPendingNewTasks, filterPendingNewTasksBySpace } from "./pending-new-tasks-model";
 
 const environmentId = EnvironmentId.make("env-1");
 const projectId = ProjectId.make("project-1");
@@ -116,5 +123,35 @@ describe("buildPendingNewTasks", () => {
     });
 
     expect(tasks.map((task) => task.title)).toEqual(["queued new", "queued old"]);
+  });
+});
+
+describe("filterPendingNewTasksBySpace", () => {
+  it("keeps a scratch draft in its originating Space and preserves queued thread overrides", () => {
+    const spaces = {
+      ...DEFAULT_SPACES_STATE,
+      activeSpaceId: "work",
+      spaces: [{ id: "work", name: "Work", theme: null }],
+      threadSpaces: { [`${environmentId}:thread-queued`]: "work" },
+    };
+    const tasks = buildPendingNewTasks({
+      queuedMessages: [queuedCreation("queued", "2026-09-05T09:00:00.000Z")],
+      drafts: {
+        "new-task:work": draft("scratch work", "2026-09-05T09:00:00.000Z", {
+          project: {
+            environmentId,
+            projectId,
+            createdAt: "2026-09-05T09:00:00.000Z",
+            spaceId: "work",
+          },
+        }),
+        "new-task:other": draft("other work", "2026-09-05T09:00:00.000Z"),
+      },
+    });
+    expect(filterPendingNewTasksBySpace(spaces, tasks).map((task) => task.title)).toEqual([
+      "scratch work",
+      "queued queued",
+    ]);
+    expect(filterPendingNewTasksBySpace({ ...spaces, activeSpaceId: null }, tasks)).toBe(tasks);
   });
 });

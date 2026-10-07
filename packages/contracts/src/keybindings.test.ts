@@ -22,6 +22,17 @@ const decode = <S extends Schema.Top>(
 const decodeResolvedRule = Schema.decodeUnknownEffect(ResolvedKeybindingRule as never);
 const encodeResolvedKeybindings = Schema.encodeEffect(ResolvedKeybindingsConfig);
 
+it.effect("accepts configurable Space navigation commands", () =>
+  Effect.gen(function* () {
+    for (const command of ["spaces.next", "spaces.previous"]) {
+      assert.strictEqual(
+        (yield* decode(KeybindingRule, { key: "alt+shift+arrowright", command })).command,
+        command,
+      );
+    }
+  }),
+);
+
 it.effect("parses keybinding rules", () =>
   Effect.gen(function* () {
     const parsed = yield* decode(KeybindingRule, {
