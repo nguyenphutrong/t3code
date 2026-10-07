@@ -1,5 +1,4 @@
 import { isThreadInSpace } from "@t3tools/client-runtime/state/spaces";
-import { SpaceSelector } from "./Spaces";
 import {
   useSpaceEntities,
   threadSpaceMenu,
@@ -3886,7 +3885,6 @@ export default function LegacySidebar() {
         <SidebarThreadDetailPrewarmer key={scopedThreadKey(threadRef)} threadRef={threadRef} />
       ))}
       <SidebarChromeHeader isElectron={isElectron} />
-      <SpaceSelector />
 
       <SidebarProjectsContent
         showArm64IntelBuildWarning={showArm64IntelBuildWarning}

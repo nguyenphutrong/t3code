@@ -5,20 +5,28 @@ need a separate branch and working directory.
 
 ## Organize work with Spaces
 
-Use the Space selector in the sidebar to focus on one context, or choose **All
-Spaces** to see everything. **Manage Spaces** lets you create, rename, delete,
-and choose a theme for each Space. Spaces are saved on this device; assignments
-keep projects and threads on different environments separate.
+Use the dots at the bottom of the sidebar to focus on one Space, or choose **All
+Spaces** to see everything. Open **Spaces view** beside the dots to see projects
+in columns. Drag a project into another Space, or into **No Space** to remove its
+assignment. Each project's menu also lets you move it without dragging. On mobile,
+hold a project to drag, and pause at the edge to scroll to more Spaces.
+
+**Manage** lets you rename, delete, and choose a theme for each Space. Spaces are
+saved on this device; assignments keep projects on different environments separate.
 
 On web and desktop, assign a project in its settings, or use **Move to Space** in
-a thread's menu. On mobile, assign projects and threads in **Manage Spaces**.
+a thread's menu. On mobile, use the Spaces overview to assign projects and threads.
 Threads inherit their project's Space unless you choose another Space or **No
 Space**. Choose **Inherit from project** to restore inheritance. New work belongs
 to the selected Space, and switching Spaces reopens its last available thread.
 Deleting a Space keeps its projects and threads available in All Spaces.
 
-Press `Alt+Shift+Right` or `Alt+Shift+Left` to switch Spaces outside text fields
-and terminals. Web and desktop bindings can be changed in **Settings → Keybindings**.
+Press `Ctrl+1` through `Ctrl+9` to open the corresponding Space, in dot order.
+`Alt+Shift+Right` and `Alt+Shift+Left` cycle through Spaces outside text fields.
+Numbered Space shortcuts also work while composing, and leave terminals and the
+model picker in control. Browsers can reserve
+number shortcuts for their tabs; web and desktop bindings can be changed in
+**Settings → Keybindings**.
 
 ## Start a thread
 

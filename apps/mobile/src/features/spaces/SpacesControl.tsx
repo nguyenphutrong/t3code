@@ -1,5 +1,16 @@
-import { useState } from "react";
-import { Alert, FlatList, Modal, Pressable, ScrollView, TextInput, View } from "react-native";
+import { SpaceProjectsOverview } from "./SpaceProjectsOverview";
+import { SymbolView } from "../../components/AppSymbol";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+  type ScrollViewInstance,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import {
   assignProjectSpace,
@@ -16,11 +27,11 @@ import type { ScopedProjectRef, ScopedThreadRef } from "@t3tools/contracts";
 import { AppText as Text } from "../../components/AppText";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
-import { useProjects, useThreadShells } from "../../state/entities";
+import { useThreadShells } from "../../state/entities";
 import { useMobileSpaces } from "../../state/spaces";
 import { MOBILE_THEME_OPTIONS } from "../../lib/mobileTheme";
 import { uuidv4 } from "../../lib/uuid";
-import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
+import { scopedThreadKey } from "../../lib/scopedEntities";
 import { SettingsRow } from "../settings/components/SettingsRow";
 
 type AssignmentTarget =
@@ -55,7 +66,6 @@ export function SpacesControl(props: {
   readonly onSelectThread?: (thread: EnvironmentThreadShell) => void;
 }) {
   const { state, update } = useMobileSpaces();
-  const projects = useProjects();
   const threads = useThreadShells();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -66,10 +76,27 @@ export function SpacesControl(props: {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"spaces" | "projects" | "threads">("spaces");
   const [target, setTarget] = useState<AssignmentTarget | null>(null);
+  const dotsRef = useRef<ScrollViewInstance>(null);
+  const dotsViewportWidth = useRef(0);
+  const dotsOffset = useRef(0);
+  const activeDotIndex = state.spaces.findIndex((space) => space.id === state.activeSpaceId);
+  const revealActiveDot = useCallback(() => {
+    const width = dotsViewportWidth.current;
+    if (activeDotIndex < 0 || width <= 0) return;
+    const left = activeDotIndex * 44;
+    const right = left + 44;
+    const offset = dotsOffset.current;
+    const next = left < offset ? left : right > offset + width ? right - width : offset;
+    if (next === offset) return;
+    dotsOffset.current = next;
+    dotsRef.current?.scrollTo({ x: next, animated: false });
+  }, [activeDotIndex]);
+  useEffect(revealActiveDot, [revealActiveDot]);
   const active = state.spaces.find((space) => space.id === state.activeSpaceId);
   const editing = state.spaces.find((space) => space.id === editingId);
   const open = () => {
     setVisible(true);
+    setTab("projects");
     setEditingId(null);
     setName("");
     setTarget(null);
@@ -109,39 +136,27 @@ export function SpacesControl(props: {
   };
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const membershipItems: ReadonlyArray<{ key: string; label: string; target: AssignmentTarget }> =
-    !visible || target || tab === "spaces"
+    !visible || target || tab !== "threads"
       ? []
-      : tab === "projects"
-        ? projects
-            .filter((project) => project.title.toLocaleLowerCase().includes(normalizedQuery))
-            .map((project) => {
-              const ref = { environmentId: project.environmentId, projectId: project.id };
-              const spaceId = resolveProjectSpace(state, ref);
-              return {
-                key: scopedProjectKey(project.environmentId, project.id),
-                label: `${project.title} · ${savedConnectionsById[project.environmentId]?.environmentLabel ?? project.environmentId} · ${state.spaces.find((space) => space.id === spaceId)?.name ?? "No Space"}`,
-                target: { kind: "project" as const, ref, title: project.title },
-              };
-            })
-        : threads
-            .filter(
-              (thread) =>
-                thread.archivedAt === null &&
-                thread.deletedAt === null &&
-                thread.title.toLocaleLowerCase().includes(normalizedQuery),
-            )
-            .map((thread) => {
-              const spaceId = resolveThreadSpace(state, thread);
-              return {
-                key: scopedThreadKey(thread.environmentId, thread.id),
-                label: `${thread.title || "Untitled thread"} · ${savedConnectionsById[thread.environmentId]?.environmentLabel ?? thread.environmentId} · ${state.spaces.find((space) => space.id === spaceId)?.name ?? "No Space"}`,
-                target: {
-                  kind: "thread" as const,
-                  ref: { environmentId: thread.environmentId, threadId: thread.id },
-                  title: thread.title,
-                },
-              };
-            });
+      : threads
+          .filter(
+            (thread) =>
+              thread.archivedAt === null &&
+              thread.deletedAt === null &&
+              thread.title.toLocaleLowerCase().includes(normalizedQuery),
+          )
+          .map((thread) => {
+            const spaceId = resolveThreadSpace(state, thread);
+            return {
+              key: scopedThreadKey(thread.environmentId, thread.id),
+              label: `${thread.title || "Untitled thread"} · ${savedConnectionsById[thread.environmentId]?.environmentLabel ?? thread.environmentId} · ${state.spaces.find((space) => space.id === spaceId)?.name ?? "No Space"}`,
+              target: {
+                kind: "thread" as const,
+                ref: { environmentId: thread.environmentId, threadId: thread.id },
+                title: thread.title,
+              },
+            };
+          });
   const selectedMembership =
     target?.kind === "project"
       ? resolveProjectSpace(state, target.ref)
@@ -159,17 +174,67 @@ export function SpacesControl(props: {
           onPress={open}
         />
       ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Select or manage Spaces"
-          onPress={open}
-          className="min-h-11 flex-row items-center px-4 py-2"
+        <View
+          className="flex-row items-center justify-center bg-drawer px-2"
+          style={{ paddingBottom: insets.bottom }}
         >
-          <Text className="flex-1 text-sm font-t3-medium text-foreground">
-            {active?.name ?? "All Spaces"}
-          </Text>
-          <Text className="text-foreground-muted">⌄</Text>
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="All Spaces"
+            accessibilityState={{ selected: state.activeSpaceId === null }}
+            onPress={() => switchSpace(null)}
+            className="min-h-11 min-w-11 items-center justify-center"
+          >
+            <SymbolView
+              name="square.grid.2x2"
+              size={18}
+              tintColorClassName={
+                state.activeSpaceId === null ? "accent-icon" : "accent-foreground-muted"
+              }
+            />
+          </Pressable>
+          <ScrollView
+            ref={dotsRef}
+            onLayout={(event) => {
+              dotsViewportWidth.current = event.nativeEvent.layout.width;
+              revealActiveDot();
+            }}
+            onScroll={(event) => {
+              dotsOffset.current = event.nativeEvent.contentOffset.x;
+            }}
+            scrollEventThrottle={16}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerClassName="flex-grow items-center justify-center"
+          >
+            {state.spaces.map((space, index) => (
+              <Pressable
+                key={space.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Switch to ${space.name}${index < 9 ? `, Control ${index + 1}` : ""}`}
+                accessibilityState={{ selected: state.activeSpaceId === space.id }}
+                onPress={() => switchSpace(space.id)}
+                className="min-h-11 min-w-11 items-center justify-center"
+              >
+                <View
+                  className={
+                    state.activeSpaceId === space.id
+                      ? "size-2.5 rounded-full bg-primary"
+                      : "size-2 rounded-full bg-foreground-muted"
+                  }
+                />
+              </Pressable>
+            ))}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Spaces overview"
+            onPress={open}
+            className="min-h-11 min-w-11 items-center justify-center"
+          >
+            <SymbolView name="square.split.2x1" size={19} tintColorClassName="accent-icon" />
+          </Pressable>
+        </View>
       )}
       <Modal
         visible={visible}
@@ -192,7 +257,7 @@ export function SpacesControl(props: {
             {(["spaces", "projects", "threads"] as const).map((item) => (
               <Action
                 key={item}
-                label={item === "spaces" ? "Spaces" : item === "projects" ? "Projects" : "Threads"}
+                label={item === "spaces" ? "Manage" : item === "projects" ? "Overview" : "Threads"}
                 selected={tab === item}
                 onPress={() => {
                   setTab(item);
@@ -203,7 +268,25 @@ export function SpacesControl(props: {
               />
             ))}
           </View>
-          {!target && tab !== "spaces" ? (
+          {!target && tab === "projects" ? (
+            <SpaceProjectsOverview
+              onOpenSpace={switchSpace}
+              onEditSpace={(id) => {
+                const space = state.spaces.find((candidate) => candidate.id === id);
+                if (!space) return;
+                setTab("spaces");
+                setEditingId(id);
+                setName(space.name);
+              }}
+              onMoveProject={(project) =>
+                setTarget({
+                  kind: "project",
+                  ref: { environmentId: project.environmentId, projectId: project.id },
+                  title: project.title,
+                })
+              }
+            />
+          ) : !target && tab === "threads" ? (
             <FlatList
               data={membershipItems}
               keyExtractor={(item) => item.key}

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   filterSpaceEntities,
   isThreadInSpace,
@@ -53,9 +53,10 @@ export const isSpaceSwitching = () => spaceSwitching;
 
 export function useSelectSpace() {
   const navigate = useNavigate();
+  const onOverview = useLocation({ select: (location) => location.pathname === "/spaces" });
   return useCallback(
     async (spaceId: string | null) => {
-      if (captureActiveSpace() === spaceId && !spaceSwitching) return;
+      if (captureActiveSpace() === spaceId && !spaceSwitching && !onOverview) return;
       const generation = ++spaceSwitchGeneration;
       spaceSwitching = true;
       try {
@@ -72,7 +73,7 @@ export function useSelectSpace() {
         if (generation === spaceSwitchGeneration) spaceSwitching = false;
       }
     },
-    [navigate],
+    [navigate, onOverview],
   );
 }
 

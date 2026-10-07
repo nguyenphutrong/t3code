@@ -1,3 +1,5 @@
+import { spaceIdForIndex } from "@t3tools/client-runtime/state/spaces";
+import { spaceJumpIndexFromCommand } from "../keybindings";
 import { isEditableFocused } from "../lib/editableFocus";
 import {
   useSpaceEntities,
@@ -97,7 +99,7 @@ import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstra
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { useClientSettings } from "../hooks/useSettings";
+import { getClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
@@ -479,6 +481,7 @@ function projectFavicon(project: Project) {
 }
 
 export function CommandPalette({ children }: { children: ReactNode }) {
+  const selectSpace = useSelectSpace();
   const navigate = useNavigate();
   const cycleSpace = useCycleSpace();
   const [state, dispatch] = useReducer(reduceCommandPaletteUiState, {
@@ -540,6 +543,15 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           modelPickerOpen: composerHandleRef.current?.isModelPickerOpen() ?? false,
         },
       });
+      const spaceIndex = command === null ? null : spaceJumpIndexFromCommand(command);
+      if (spaceIndex !== null) {
+        const target = spaceIdForIndex(getClientSettings().spaces, spaceIndex);
+        if (target === undefined) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) void selectSpace(target).catch(reportSpaceError);
+        return;
+      }
       if (command === "spaces.next" || command === "spaces.previous") {
         event.preventDefault();
         event.stopPropagation();
@@ -599,6 +611,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    selectSpace,
     cycleSpace,
     appearanceMode,
     keybindings,
@@ -2363,12 +2376,12 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push({
     kind: "action",
     value: "spaces:manage",
-    title: "Manage Spaces",
+    title: "Spaces view",
     icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
     searchTerms: ["spaces", "create", "rename", "delete", "theme"],
     run: async () => {
       setOpen(false);
-      await navigate({ to: "/settings/general", hash: "spaces" });
+      await navigate({ to: "/spaces" });
     },
   });
   actionItems.push(

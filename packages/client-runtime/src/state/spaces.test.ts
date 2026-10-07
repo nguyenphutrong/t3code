@@ -15,6 +15,7 @@ import {
   resolveProjectSpace,
   resolveThreadSpace,
   selectSpace,
+  spaceIdForIndex,
   updateSpace,
 } from "./spaces.ts";
 
@@ -174,5 +175,13 @@ describe("Spaces membership", () => {
   it("keeps an empty Spaces configuration unchanged when cycling", () => {
     expect(cycleSpace(DEFAULT_SPACES_STATE, 1)).toBe(DEFAULT_SPACES_STATE);
     expect(cycleSpace(DEFAULT_SPACES_STATE, -1)).toBe(DEFAULT_SPACES_STATE);
+  });
+
+  it("selects named Spaces by one-based index without including All Spaces", () => {
+    expect(spaceIdForIndex(state, 1)).toBe("work");
+    expect(spaceIdForIndex(state, 2)).toBe("personal");
+    expect(spaceIdForIndex(state, 0)).toBeUndefined();
+    expect(spaceIdForIndex(state, 3)).toBeUndefined();
+    expect(spaceIdForIndex(DEFAULT_SPACES_STATE, 1)).toBeUndefined();
   });
 });

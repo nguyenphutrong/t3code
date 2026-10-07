@@ -209,7 +209,6 @@ export function HomeRouteScreen() {
           onStartNewTask={() => navigation.navigate("NewTaskSheet", { screen: "NewTask" })}
         />
 
-        <SpacesControl onSelectThread={handleSelectThread} />
         <HomeScreen
           catalogState={catalogState}
           environments={environments}
@@ -265,6 +264,7 @@ export function HomeRouteScreen() {
           selectedProjectKey={selectedProjectKey}
           threads={threads}
         />
+        <SpacesControl onSelectThread={handleSelectThread} />
       </>
     </AndroidHomeFabLayout>
   );

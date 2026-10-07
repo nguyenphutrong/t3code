@@ -1,4 +1,10 @@
-import { cycleSpace, resolveThreadSpace, selectSpace } from "@t3tools/client-runtime/state/spaces";
+import { SPACE_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
+import {
+  cycleSpace,
+  resolveThreadSpace,
+  selectSpace,
+  spaceIdForIndex,
+} from "@t3tools/client-runtime/state/spaces";
 import { useMobileSpaces } from "../../state/spaces";
 import { StackActions, useNavigation } from "@react-navigation/native";
 import { resolveThreadReferenceCopyTarget } from "@t3tools/shared/threadReference";
@@ -107,6 +113,9 @@ export function HardwareKeyboardCommandProvider({
     if (spaces.spaces.length > 0 && !pathname.includes("/terminal")) {
       commands.add("spaces.next");
       commands.add("spaces.previous");
+      SPACE_JUMP_KEYBINDING_COMMANDS.slice(0, spaces.spaces.length).forEach((command) =>
+        commands.add(command),
+      );
     }
     if (pathname !== "/" && !pathname.startsWith("/threads/")) {
       for (const command of commands) {
@@ -125,8 +134,16 @@ export function HardwareKeyboardCommandProvider({
 
   const onCommand = useCallback(
     (command: HardwareKeyboardCommand) => {
-      if (command === "spaces.next" || command === "spaces.previous") {
-        const next = cycleSpace(spaces, command === "spaces.next" ? 1 : -1);
+      if (
+        command === "spaces.next" ||
+        command === "spaces.previous" ||
+        command.startsWith("spaces.jump.")
+      ) {
+        const id = command.startsWith("spaces.jump.")
+          ? spaceIdForIndex(spaces, Number(command.slice("spaces.jump.".length)))
+          : cycleSpace(spaces, command === "spaces.next" ? 1 : -1).activeSpaceId;
+        if (id === undefined) return;
+        const next = selectSpace(spaces, id);
         updateSpaces((current) => selectSpace(current, next.activeSpaceId));
         const recent = next.lastThreadBySpace[next.activeSpaceId ?? "all"];
         const thread =

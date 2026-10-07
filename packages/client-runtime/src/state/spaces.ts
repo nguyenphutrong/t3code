@@ -165,6 +165,10 @@ export function cycleSpace(state: SpacesState, direction: 1 | -1): SpacesState {
   );
 }
 
+export function spaceIdForIndex(state: SpacesState, index: number): string | undefined {
+  return state.spaces[index - 1]?.id;
+}
+
 export function rememberSpaceThread(state: SpacesState, thread: ScopedThreadRef): SpacesState {
   return {
     ...state,

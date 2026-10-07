@@ -1,5 +1,5 @@
 import { SpaceCoordinator } from "./SpaceCoordinator";
-import { SpaceSelector } from "./Spaces";
+import { SpaceDots } from "./Spaces";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -329,7 +329,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           {isOnSettings ? (
             <>
               <SidebarChromeHeader isElectron={isElectron} />
-              <SpaceSelector />
               <SettingsSidebarNav pathname={pathname} />
             </>
           ) : legacySidebarEnabled ? (
@@ -337,6 +336,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           ) : (
             <ThreadSidebar />
           )}
+          <SpaceDots />
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}

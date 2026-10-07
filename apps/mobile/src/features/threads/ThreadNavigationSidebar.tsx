@@ -943,7 +943,6 @@ function ThreadNavigationSidebarPane(
           }}
         />
         <View className="flex-1">
-          <SpacesControl onSelectThread={props.onSelectThread} onEmptySpace={props.onEmptySpace} />
           <SwipeableScrollGateProvider enabled={swipeEnabled}>
             <GestureDetector gesture={sidebarScrollGesture}>
               <LegendList
@@ -978,6 +977,7 @@ function ThreadNavigationSidebarPane(
               />
             </GestureDetector>
           </SwipeableScrollGateProvider>
+          <SpacesControl onSelectThread={props.onSelectThread} onEmptySpace={props.onEmptySpace} />
         </View>
       </>
     );

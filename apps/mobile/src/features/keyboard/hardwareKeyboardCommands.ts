@@ -1,7 +1,13 @@
-import { EnvironmentId, ThreadId, type ThreadJumpKeybindingCommand } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ThreadId,
+  type SpaceJumpKeybindingCommand,
+  type ThreadJumpKeybindingCommand,
+} from "@t3tools/contracts";
 import { useEffect } from "react";
 
 export type HardwareKeyboardCommand =
+  | SpaceJumpKeybindingCommand
   | ThreadJumpKeybindingCommand
   | "commandPalette"
   | "paletteNext"

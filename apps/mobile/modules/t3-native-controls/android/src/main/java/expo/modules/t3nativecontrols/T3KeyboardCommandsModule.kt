@@ -46,6 +46,9 @@ class T3KeyboardCommandsView(
         else -> null
       }
     }
+    if (event.isCtrlPressed && !event.isAltPressed && !event.isShiftPressed && !event.isMetaPressed && event.keyCode in KeyEvent.KEYCODE_1..KeyEvent.KEYCODE_9) {
+      return "spaces.jump.${event.keyCode - KeyEvent.KEYCODE_1 + 1}"
+    }
     if (!event.isCtrlPressed) return null
     return when {
       event.keyCode == KeyEvent.KEYCODE_C && event.isShiftPressed && !event.isAltPressed ->

@@ -1,4 +1,3 @@
-import { SpaceSelector } from "./Spaces";
 import {
   useSpaceEntities,
   threadSpaceMenu,
@@ -5010,7 +5009,6 @@ export default function Sidebar() {
     <>
       <ThreadContextDragGhost />
       <SidebarChromeHeader isElectron={isElectron} />
-      <SpaceSelector />
       <SidebarContent
         className="min-h-full"
         fixedHeader={

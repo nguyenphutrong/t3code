@@ -60,6 +60,15 @@ public final class T3KeyboardCommandsView: ExpoView {
       enabledCommand("spaces.previous", input: UIKeyCommand.inputLeftArrow, modifiers: [.alternate, .shift], action: #selector(previousSpace), title: "Previous Space"),
       enabledCommand("cycleHost", input: "h", modifiers: [.command, .shift], action: #selector(cycleHost), title: "Next Machine"),
     ].compactMap { $0 }
+    commands += (1...9).compactMap { index in
+      enabledCommand(
+        "spaces.jump.\(index)",
+        input: String(index),
+        modifiers: .control,
+        action: #selector(jumpToSpace(_:)),
+        title: "Go to Space \(index)"
+      )
+    }
     if isPad {
       commands += (1...9).compactMap { index in
         enabledCommand(
@@ -157,6 +166,10 @@ public final class T3KeyboardCommandsView: ExpoView {
   @objc private func openReview() { emit("review") }
   @objc private func copyThreadReference() { emit("copyThreadReference") }
   @objc private func handleToggleSidebar() { emit("toggleSidebar") }
+  @objc private func jumpToSpace(_ sender: UIKeyCommand) {
+    guard let input = sender.input else { return }
+    emit("spaces.jump.\(input)")
+  }
   @objc private func nextSpace() { emit("spaces.next") }
   @objc private func previousSpace() { emit("spaces.previous") }
   @objc private func cycleHost() { emit("cycleHost") }
