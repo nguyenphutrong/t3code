@@ -6,6 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   assignProjectSpace,
   assignThreadSpace,
+  assignNewThreadSpace,
   createSpace,
   cycleSpace,
   filterSpaceEntities,
@@ -35,6 +36,20 @@ const state = {
 };
 
 describe("Spaces membership", () => {
+  it("lets new threads inherit in All Spaces and matching contexts, overriding only other projects", () => {
+    const work = assignProjectSpace(state, projectRef, "work");
+    for (const selected of [null, "work"]) {
+      const created = assignNewThreadSpace(work, thread, selected);
+      expect(Object.hasOwn(created.threadSpaces, "local:thread")).toBe(false);
+      expect(resolveThreadSpace(created, thread)).toBe("work");
+      expect(resolveThreadSpace(assignProjectSpace(created, projectRef, "personal"), thread)).toBe(
+        "personal",
+      );
+    }
+    expect(resolveThreadSpace(assignNewThreadSpace(work, thread, "personal"), thread)).toBe(
+      "personal",
+    );
+  });
   it("does not recreate memberships when a captured Space is deleted before creation finishes", () => {
     const deleted = removeSpace(state, "work");
     expect(

@@ -89,6 +89,18 @@ export function assignThreadSpace(
   return { ...state, threadSpaces };
 }
 
+export function assignNewThreadSpace(
+  state: SpacesState,
+  thread: SpaceThread,
+  spaceId: string | null,
+): SpacesState {
+  return assignThreadSpace(
+    state,
+    { environmentId: thread.environmentId, threadId: thread.id },
+    spaceId === null || resolveProjectSpace(state, thread) === spaceId ? undefined : spaceId,
+  );
+}
+
 export function createSpace(state: SpacesState, space: Space): SpacesState {
   const name = space.name.trim();
   if (!name || state.spaces.some((existing) => existing.id === space.id)) {
