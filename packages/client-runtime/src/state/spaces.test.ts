@@ -35,6 +35,15 @@ const state = {
 };
 
 describe("Spaces membership", () => {
+  it("does not recreate memberships when a captured Space is deleted before creation finishes", () => {
+    const deleted = removeSpace(state, "work");
+    expect(
+      resolveProjectSpace(assignProjectSpace(deleted, projectRef, "work"), projectRef),
+    ).toBeNull();
+    const assigned = assignProjectSpace(deleted, projectRef, "personal");
+    expect(resolveThreadSpace(assignThreadSpace(assigned, threadRef, "work"), thread)).toBeNull();
+    expect(assignThreadSpace(assigned, threadRef, "work").threadSpaces["local:thread"]).toBeNull();
+  });
   it("defaults existing client settings to All Spaces", () => {
     expect(decodeClientSettings({}).spaces).toEqual(DEFAULT_SPACES_STATE);
   });

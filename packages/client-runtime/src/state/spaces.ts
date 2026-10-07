@@ -65,7 +65,7 @@ export function assignProjectSpace(
 ): SpacesState {
   const projectSpaces = { ...state.projectSpaces };
   const key = scopedProjectKey(project);
-  if (spaceId === null) {
+  if (spaceId === null || !state.spaces.some((space) => space.id === spaceId)) {
     delete projectSpaces[key];
   } else {
     projectSpaces[key] = spaceId;
@@ -83,7 +83,8 @@ export function assignThreadSpace(
   if (spaceId === undefined) {
     delete threadSpaces[key];
   } else {
-    threadSpaces[key] = spaceId;
+    // Creation can finish after its captured Space has been deleted.
+    threadSpaces[key] = state.spaces.some((space) => space.id === spaceId) ? spaceId : null;
   }
   return { ...state, threadSpaces };
 }
