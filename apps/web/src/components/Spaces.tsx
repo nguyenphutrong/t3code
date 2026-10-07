@@ -8,12 +8,11 @@ import { getThemeDefinition, getThemeColorsForMode, getStandardThemeColors } fro
 import { useTheme } from "../hooks/useTheme";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { useSidebar } from "./ui/sidebar";
-import { Columns3Icon, LayoutGridIcon, PlusIcon } from "lucide-react";
+import { Columns3Icon, LayoutGridIcon } from "lucide-react";
 import type { ScopedProjectRef } from "@t3tools/contracts";
 import {
   assignProjectSpace,
   createSpace,
-  removeSpace,
   resolveProjectSpace,
   updateSpace,
 } from "@t3tools/client-runtime/state/spaces";
@@ -26,7 +25,18 @@ import { useCustomThemes } from "../hooks/useCustomThemes";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./ui/select";
-import { SettingsRow, SettingsSection } from "./settings/settingsLayout";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
+import { ThemePreviewCircle } from "./settings/ThemePreviewCircles";
+import type { Space } from "@t3tools/contracts/settings";
 
 export function spacePreviewColors(theme: string | null, appearance: "light" | "dark") {
   if (!theme) return null;
@@ -34,6 +44,15 @@ export function spacePreviewColors(theme: string | null, appearance: "light" | "
   if (theme === "system") return getStandardThemeColors(appearance);
   const definition = getThemeDefinition(theme);
   return definition ? (getThemeColorsForMode(definition, appearance) ?? definition.colors) : null;
+}
+
+/** The appearance a Space's preview colors belong to, for themes that only ship one mode. */
+function spacePreviewMode(theme: string | null, appearance: "light" | "dark") {
+  if (theme === "light" || theme === "dark") return theme;
+  const definition = theme ? getThemeDefinition(theme) : null;
+  return definition && !getThemeColorsForMode(definition, appearance)
+    ? definition.appearance
+    : appearance;
 }
 
 /** Arc-style switcher: the active Space reads as a labeled pill, the rest stay compact dots. */
@@ -165,111 +184,145 @@ export function SpaceAssignment({ projectRef }: { projectRef: ScopedProjectRef }
   );
 }
 
-export function SpacesSettings() {
-  const spaces = useClientSettings((settings) => settings.spaces);
-  const [name, setName] = useState("");
+const STANDARD_SPACE_THEMES = [
+  { id: "system", label: "T3 Code" },
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+] as const;
+
+/** Theme balls for a Space, drawn like the Appearance settings so each choice previews itself. */
+function SpaceThemePicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (theme: string | null) => void;
+}) {
   const customThemes = useCustomThemes();
   const environmentThemes = useEnvironmentThemeDefinitions();
+  const { resolvedTheme } = useTheme();
   const themes = [
+    ...STANDARD_SPACE_THEMES,
     ...new Map(
       [...BUILT_IN_THEMES, ...customThemes, ...environmentThemes].map((theme) => [theme.id, theme]),
     ).values(),
   ];
+  const options = [{ id: null, label: "App theme" }, ...themes];
   return (
-    <SettingsSection id="spaces" title="Spaces">
-      <p className="px-3 py-2 text-sm text-muted-foreground sm:px-4">
-        Organize projects and threads into Spaces. Saved on this device.
-      </p>
-      {spaces.spaces.map((space) => (
-        <SettingsRow
-          key={space.id}
-          title={space.name}
-          control={
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                size="sm"
-                className="w-36"
-                key={`${space.id}:${space.name}`}
-                aria-label={`Rename ${space.name}`}
-                defaultValue={space.name}
-                onBlur={(event) => {
-                  const nextName = event.currentTarget.value.trim();
-                  if (nextName && nextName !== space.name)
-                    void updateSpaces((state) =>
-                      updateSpace(state, space.id, { name: nextName }),
-                    ).catch(reportSpaceError);
-                  else event.currentTarget.value = space.name;
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-              />
-              <Select
-                value={space.theme ?? "global"}
-                onValueChange={(theme) => {
-                  if (theme !== null)
-                    void updateSpaces((state) =>
-                      updateSpace(state, space.id, { theme: theme === "global" ? null : theme }),
-                    ).catch(reportSpaceError);
-                }}
-              >
-                <SelectTrigger size="sm" className="w-40" aria-label={`Theme for ${space.name}`}>
-                  <SelectValue>
-                    {space.theme === null
-                      ? "Global theme"
-                      : (themes.find((theme) => theme.id === space.theme)?.label ?? space.theme)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup>
-                  <SelectItem value="global">Global theme</SelectItem>
-                  <SelectItem value="light">Light</SelectItem>
-                  <SelectItem value="dark">Dark</SelectItem>
-                  <SelectItem value="system">System</SelectItem>
-                  {themes.map((theme) => (
-                    <SelectItem key={theme.id} value={theme.id}>
-                      {theme.label}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  void updateSpaces((state) => removeSpace(state, space.id)).catch(reportSpaceError)
-                }
-                aria-label={`Delete ${space.name}`}
-              >
-                Delete
-              </Button>
-            </div>
-          }
-        />
-      ))}
-      <form
-        className="flex items-center gap-2 px-3 py-3 sm:px-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!name.trim()) return;
-          const nextName = name.trim();
-          const id = randomUUID();
-          void updateSpaces((state) => createSpace(state, { id, name: nextName, theme: null }))
-            .then(() => setName(""))
-            .catch(reportSpaceError);
-        }}
-      >
-        <Input
-          size="sm"
-          aria-label="New Space name"
-          placeholder="Space name"
-          value={name}
-          onChange={(event) => setName(event.currentTarget.value)}
-        />
-        <Button type="submit" size="sm" variant="outline" disabled={!name.trim()}>
-          <PlusIcon aria-hidden />
-          Create Space
+    <div role="radiogroup" aria-label="Space theme" className="grid grid-cols-4 gap-x-2 gap-y-3">
+      {options.map((option) => {
+        const colors = spacePreviewColors(option.id, resolvedTheme);
+        const selected = value === option.id;
+        return (
+          <button
+            key={option.id ?? "app"}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option.id)}
+            className="group flex min-w-0 cursor-pointer flex-col items-center gap-1.5 rounded-lg py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="relative flex size-12 items-center justify-center rounded-full">
+              {colors ? (
+                <ThemePreviewCircle
+                  colors={colors}
+                  mode={spacePreviewMode(option.id, resolvedTheme)}
+                  className="size-10"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="size-10 rounded-full border-2 border-dashed border-muted-foreground/40"
+                />
+              )}
+              {selected ? (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 rounded-full"
+                  style={{ boxShadow: "inset 0 0 0 2px var(--ring)" }}
+                />
+              ) : null}
+            </span>
+            <span
+              className={`max-w-full truncate text-xs ${selected ? "font-medium text-foreground" : "text-muted-foreground group-hover:text-foreground"}`}
+            >
+              {option.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SpaceEditorForm({ space, onDone }: { space: Space | null; onDone: () => void }) {
+  const [name, setName] = useState(space?.name ?? "");
+  const [theme, setTheme] = useState<string | null>(space?.theme ?? null);
+  const [saving, setSaving] = useState(false);
+  const trimmed = name.trim();
+  return (
+    <form
+      className="flex min-h-0 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!trimmed || saving) return;
+        setSaving(true);
+        void updateSpaces((state) =>
+          space
+            ? updateSpace(state, space.id, { name: trimmed, theme })
+            : createSpace(state, { id: randomUUID(), name: trimmed, theme }),
+        )
+          .then(onDone)
+          .catch(reportSpaceError)
+          .finally(() => setSaving(false));
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>{space ? "Edit Space" : "Create a Space"}</DialogTitle>
+        <DialogDescription>
+          Spaces group projects and their threads. They are saved on this device.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogPanel>
+        <label className="block space-y-2">
+          <span className="text-sm font-medium">Name</span>
+          <Input
+            value={name}
+            onChange={(event) => setName(event.currentTarget.value)}
+            placeholder="Work, writing, personal…"
+            autoFocus
+          />
+        </label>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Theme</p>
+          <SpaceThemePicker value={theme} onChange={setTheme} />
+        </div>
+      </DialogPanel>
+      <DialogFooter>
+        <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+        <Button type="submit" disabled={!trimmed || saving}>
+          {space ? "Save" : "Create Space"}
         </Button>
-      </form>
-    </SettingsSection>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/** Create a Space when `space` is null, otherwise rename it and change its theme. */
+export function SpaceEditorDialog({
+  open,
+  space,
+  onOpenChange,
+}: {
+  open: boolean;
+  space: Space | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup className="sm:max-w-md">
+        <SpaceEditorForm space={space} onDone={() => onOpenChange(false)} />
+      </DialogPopup>
+    </Dialog>
   );
 }

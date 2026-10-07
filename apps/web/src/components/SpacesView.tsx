@@ -17,14 +17,14 @@ import {
   ArrowUpRightIcon,
   GripVerticalIcon,
   MoreHorizontalIcon,
+  PencilIcon,
   PlusIcon,
-  SettingsIcon,
+  Trash2Icon,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   assignProjectSpace,
-  createSpace,
+  removeSpace,
   resolveProjectSpace,
 } from "@t3tools/client-runtime/state/spaces";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
@@ -34,32 +34,33 @@ import { reportSpaceError, updateSpaces, useSelectSpace } from "../hooks/useSpac
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
-import { spacePreviewColors } from "./Spaces";
+import { SpaceEditorDialog, spacePreviewColors } from "./Spaces";
 import { useProjects } from "../state/entities";
 import { useEnvironments } from "../state/environments";
-import { cn, randomUUID } from "../lib/utils";
+import { cn } from "../lib/utils";
 import { isElectron } from "../env";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import { SidebarInset } from "./ui/sidebar";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import {
-  Dialog,
-  DialogClose,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "./ui/dialog";
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import {
   Menu,
   MenuGroup,
   MenuGroupLabel,
+  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
+  MenuSeparator,
   MenuTrigger,
 } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -164,11 +165,15 @@ function SpaceColumn({
   space,
   active,
   count,
+  onEdit,
+  onDelete,
   children,
 }: {
   space: Space | null;
   active: boolean;
   count: number;
+  onEdit: (space: Space) => void;
+  onDelete: (space: Space) => void;
   children: ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnKey(space?.id ?? null) });
@@ -232,6 +237,26 @@ function SpaceColumn({
             </span>
           ) : null}
           <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+          {space ? (
+            <Menu>
+              <MenuTrigger
+                render={<Button variant="ghost" size="icon-xs" aria-label={`${name} options`} />}
+              >
+                <MoreHorizontalIcon aria-hidden />
+              </MenuTrigger>
+              <MenuPopup align="end">
+                <MenuItem onClick={() => onEdit(space)}>
+                  <PencilIcon aria-hidden />
+                  Edit Space…
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem variant="destructive" onClick={() => onDelete(space)}>
+                  <Trash2Icon aria-hidden />
+                  Delete Space…
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+          ) : null}
         </header>
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {children}
@@ -250,13 +275,14 @@ export function SpacesView() {
   const spaces = useClientSettings((settings) => settings.spaces);
   const projects = useProjects();
   const { environments } = useEnvironments();
-  const navigate = useNavigate();
   useCustomThemes();
   useEnvironmentThemeDefinitions();
   const [dragged, setDragged] = useState<EnvironmentProject | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [name, setName] = useState("");
+  const [editor, setEditor] = useState<{ open: boolean; space: Space | null }>({
+    open: false,
+    space: null,
+  });
+  const [deleting, setDeleting] = useState<Space | null>(null);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
@@ -288,15 +314,7 @@ export function SpacesView() {
             Drag projects between Spaces. Threads follow their project unless moved on their own.
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void navigate({ to: "/settings/general", hash: "spaces" })}
-        >
-          <SettingsIcon aria-hidden />
-          Manage
-        </Button>
-        <Button size="sm" onClick={() => setCreating(true)}>
+        <Button size="sm" onClick={() => setEditor({ open: true, space: null })}>
           <PlusIcon aria-hidden />
           New Space
         </Button>
@@ -345,6 +363,8 @@ export function SpacesView() {
                 space={space}
                 active={space !== null && spaces.activeSpaceId === spaceId}
                 count={members.length}
+                onEdit={(target) => setEditor({ open: true, space: target })}
+                onDelete={setDeleting}
               >
                 {members.map((project) => (
                   <SpaceProject
@@ -371,45 +391,42 @@ export function SpacesView() {
           ) : null}
         </DragOverlay>
       </DndContext>
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogPopup className="sm:max-w-sm">
-          <form
-            className="flex min-h-0 flex-col"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!name.trim() || saving) return;
-              setSaving(true);
-              const space = { id: randomUUID(), name: name.trim(), theme: null };
-              void updateSpaces((state) => createSpace(state, space))
-                .then(() => {
-                  setName("");
-                  setCreating(false);
-                })
-                .catch(reportSpaceError)
-                .finally(() => setSaving(false));
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Create a Space</DialogTitle>
-            </DialogHeader>
-            <DialogPanel>
-              <Input
-                aria-label="Name"
-                value={name}
-                onChange={(event) => setName(event.currentTarget.value)}
-                placeholder="Work, writing, personal…"
-                autoFocus
-              />
-            </DialogPanel>
-            <DialogFooter>
-              <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
-              <Button type="submit" disabled={!name.trim() || saving}>
-                {saving ? "Creating…" : "Create Space"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogPopup>
-      </Dialog>
+      <SpaceEditorDialog
+        open={editor.open}
+        space={editor.space}
+        onOpenChange={(open) => setEditor((current) => ({ ...current, open }))}
+      />
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleting?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its projects and threads move to No Space and stay available in All Spaces.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const target = deleting;
+                setDeleting(null);
+                if (target)
+                  void updateSpaces((state) => removeSpace(state, target.id)).catch(
+                    reportSpaceError,
+                  );
+              }}
+            >
+              Delete Space
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </SidebarInset>
   );
 }

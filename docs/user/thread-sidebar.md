@@ -11,8 +11,8 @@ overview** beside the dots to see projects in columns. Drag a project into anoth
 Space, or into **No Space** to remove its assignment. Each project's menu also lets you move it without dragging. On mobile,
 hold a project to drag, and pause at the edge to scroll to more Spaces.
 
-**Manage** lets you rename, delete, and choose a theme for each Space. Spaces are
-saved on this device; assignments keep projects on different environments separate.
+Create a Space with **New Space** in the overview, and use a Space's menu there to
+rename it, pick its theme, or delete it. Spaces are saved on this device; assignments keep projects on different environments separate.
 
 On web and desktop, assign a project in its settings, or use **Move to Space** in
 a thread's menu. On mobile, use the Spaces overview to assign projects and threads.
