@@ -12,7 +12,9 @@ Space, or into **No Space** to remove its assignment. Each project's menu also l
 hold a project to drag, and pause at the edge to scroll to more Spaces.
 
 Create a Space with **New Space** in the overview, and use a Space's menu there to
-rename it, pick its theme, or delete it. Spaces are saved on this device; assignments keep projects on different environments separate.
+rename it, pick its theme, or delete it. While a Space with its own theme is open,
+**Settings → Appearance → Themes** changes that Space's theme; choose **Use app theme**
+to go back to the app-wide theme. Spaces are saved on this device; assignments keep projects on different environments separate.
 
 On web and desktop, assign a project in its settings, or use **Move to Space** in
 a thread's menu. On mobile, use the Spaces overview to assign projects and threads.
