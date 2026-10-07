@@ -6,9 +6,9 @@ need a separate branch and working directory.
 ## Organize work with Spaces
 
 Use the dots at the bottom of the sidebar to focus on one Space, or choose **All
-Spaces** to see everything. Open **Spaces view** beside the dots to see projects
-in columns. Drag a project into another Space, or into **No Space** to remove its
-assignment. Each project's menu also lets you move it without dragging. On mobile,
+Spaces** to see everything. The selected Space shows its name there. Open **Spaces
+overview** beside the dots to see projects in columns. Drag a project into another
+Space, or into **No Space** to remove its assignment. Each project's menu also lets you move it without dragging. On mobile,
 hold a project to drag, and pause at the edge to scroll to more Spaces.
 
 **Manage** lets you rename, delete, and choose a theme for each Space. Spaces are

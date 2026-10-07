@@ -8,7 +8,7 @@ import { getThemeDefinition, getThemeColorsForMode, getStandardThemeColors } fro
 import { useTheme } from "../hooks/useTheme";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { useSidebar } from "./ui/sidebar";
-import { LayoutGridIcon, PanelsTopLeftIcon, PlusIcon } from "lucide-react";
+import { Columns3Icon, LayoutGridIcon, PlusIcon } from "lucide-react";
 import type { ScopedProjectRef } from "@t3tools/contracts";
 import {
   assignProjectSpace,
@@ -36,6 +36,7 @@ export function spacePreviewColors(theme: string | null, appearance: "light" | "
   return definition ? (getThemeColorsForMode(definition, appearance) ?? definition.colors) : null;
 }
 
+/** Arc-style switcher: the active Space reads as a labeled pill, the rest stay compact dots. */
 export function SpaceDots() {
   const spaces = useClientSettings((settings) => settings.spaces);
   const selectedDot = useRef<HTMLButtonElement | null>(null);
@@ -54,80 +55,81 @@ export function SpaceDots() {
     if (isMobile) setOpenMobile(false);
     void selectSpace(id).catch(reportSpaceError);
   };
+  const items = [
+    { id: null, name: "All Spaces", accent: null, shortcut: undefined },
+    ...spaces.spaces.map((space, index) => {
+      const command = SPACE_JUMP_KEYBINDING_COMMANDS[index];
+      return {
+        id: space.id,
+        name: space.name,
+        accent: spacePreviewColors(space.theme, resolvedTheme)?.accent ?? null,
+        shortcut: command ? shortcutLabelForCommand(keybindings, command) : undefined,
+      };
+    }),
+  ];
   return (
     <nav
       aria-label="Spaces"
       className="flex shrink-0 items-center gap-1 border-t border-sidebar-border/50 px-2 py-1.5"
     >
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label="All Spaces"
-              aria-pressed={spaces.activeSpaceId === null}
-              onClick={() => switchSpace(null)}
-              className="flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-sidebar-row-active aria-pressed:text-sidebar-foreground"
-            />
-          }
-        >
-          <LayoutGridIcon aria-hidden className="size-4" />
-        </TooltipTrigger>
-        <TooltipPopup side="top">All Spaces</TooltipPopup>
-      </Tooltip>
-      <div className="flex min-w-0 flex-1 overflow-x-auto px-1">
-        <div className="flex w-max min-w-full shrink-0 items-center justify-center gap-1">
-          {spaces.spaces.map((space, index) => {
-            const colors = spacePreviewColors(space.theme, resolvedTheme);
-            const shortcut = SPACE_JUMP_KEYBINDING_COMMANDS[index];
-            const label = shortcut ? shortcutLabelForCommand(keybindings, shortcut) : undefined;
-            return (
-              <Tooltip key={space.id}>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label={`Switch to ${space.name}`}
-                      ref={spaces.activeSpaceId === space.id ? selectedDot : undefined}
-                      aria-pressed={spaces.activeSpaceId === space.id}
-                      onClick={() => switchSpace(space.id)}
-                      className="group flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring"
-                    />
-                  }
-                >
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+        {items.map((item) => {
+          const active = spaces.activeSpaceId === item.id;
+          return (
+            <Tooltip key={item.id ?? "all"}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={item.id === null ? "All Spaces" : `Switch to ${item.name}`}
+                    ref={active ? selectedDot : undefined}
+                    aria-pressed={active}
+                    onClick={() => switchSpace(item.id)}
+                    className="flex h-7 min-w-7 shrink-0 items-center justify-center gap-1.5 rounded-full text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:max-w-32 aria-pressed:bg-sidebar-row-active aria-pressed:px-2.5 aria-pressed:text-sidebar-foreground"
+                  />
+                }
+              >
+                {item.id === null ? (
+                  <LayoutGridIcon aria-hidden className="size-3.5 shrink-0" />
+                ) : (
                   <span
                     aria-hidden
-                    className="size-2.5 rounded-full bg-sidebar-muted-foreground/40 group-aria-pressed:size-3 group-aria-pressed:ring-2 group-aria-pressed:ring-sidebar-foreground/30 group-aria-pressed:ring-offset-2 group-aria-pressed:ring-offset-sidebar"
-                    style={colors ? { backgroundColor: colors.accent } : undefined}
+                    className={`size-2 shrink-0 rounded-full ${active ? "bg-sidebar-foreground/70" : "bg-sidebar-muted-foreground/45"}`}
+                    style={item.accent ? { backgroundColor: item.accent } : undefined}
                   />
-                </TooltipTrigger>
-                <TooltipPopup side="top">
-                  {space.name}
-                  {label ? ` · ${label}` : ""}
-                </TooltipPopup>
-              </Tooltip>
-            );
-          })}
-        </div>
+                )}
+                {active ? (
+                  <span className="min-w-0 truncate text-xs font-medium">
+                    {item.id === null ? "All" : item.name}
+                  </span>
+                ) : null}
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {item.name}
+                {item.shortcut ? ` · ${item.shortcut}` : ""}
+              </TooltipPopup>
+            </Tooltip>
+          );
+        })}
       </div>
       <Tooltip>
         <TooltipTrigger
           render={
             <button
               type="button"
-              aria-label="Spaces view"
+              aria-label="Spaces overview"
               aria-pressed={overviewOpen}
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
                 void navigate({ to: "/spaces" });
               }}
-              className="flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-sidebar-row-active"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-sidebar-row-active aria-pressed:text-sidebar-foreground"
             />
           }
         >
-          <PanelsTopLeftIcon aria-hidden className="size-4" />
+          <Columns3Icon aria-hidden className="size-4" />
         </TooltipTrigger>
-        <TooltipPopup side="top">Spaces view</TooltipPopup>
+        <TooltipPopup side="top">Spaces overview</TooltipPopup>
       </Tooltip>
     </nav>
   );

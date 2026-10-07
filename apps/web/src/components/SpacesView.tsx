@@ -1,9 +1,10 @@
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   pointerWithin,
   useDraggable,
@@ -12,7 +13,13 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { GripVerticalIcon, MoreHorizontalIcon, PlusIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  GripVerticalIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  SettingsIcon,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
@@ -30,43 +37,88 @@ import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
 import { spacePreviewColors } from "./Spaces";
 import { useProjects } from "../state/entities";
 import { useEnvironments } from "../state/environments";
-import { randomUUID } from "../lib/utils";
+import { cn, randomUUID } from "../lib/utils";
 import { isElectron } from "../env";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import { SidebarInset } from "./ui/sidebar";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Dialog, DialogClose, DialogFooter, DialogPopup, DialogTitle } from "./ui/dialog";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
+import {
+  Dialog,
+  DialogClose,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const columnKey = (spaceId: string | null) => `space:${spaceId ?? "unassigned"}`;
 const projectKey = (project: EnvironmentProject) =>
   scopedProjectKey(scopeProjectRef(project.environmentId, project.id));
 
-function SpaceProject({
+function ProjectSummary({
   project,
-  environmentLabel,
+  detail,
 }: {
   project: EnvironmentProject;
-  environmentLabel: string;
+  detail?: string | undefined;
+}) {
+  return (
+    <>
+      <ProjectFavicon project={project} className="size-5 shrink-0" />
+      <Tooltip>
+        <TooltipTrigger render={<div className="min-w-0 flex-1" />}>
+          <p className="truncate text-sm font-medium">{project.title}</p>
+          {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
+        </TooltipTrigger>
+        <TooltipPopup>{project.workspaceRoot}</TooltipPopup>
+      </Tooltip>
+    </>
+  );
+}
+
+function SpaceProject({
+  project,
+  spaceId,
+  detail,
+}: {
+  project: EnvironmentProject;
+  spaceId: string | null;
+  detail: string | undefined;
 }) {
   const spaces = useClientSettings((settings) => settings.spaces);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: projectKey(project),
   });
-  const move = (spaceId: string | null) => {
+  const move = (nextSpaceId: string | null) => {
     void updateSpaces((state) =>
-      assignProjectSpace(state, scopeProjectRef(project.environmentId, project.id), spaceId),
+      assignProjectSpace(state, scopeProjectRef(project.environmentId, project.id), nextSpaceId),
     ).catch(reportSpaceError);
   };
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      // The whole card drags with a mouse or long press; keyboard drags start from the grip
+      // so Enter on the menu button cannot pick the project up.
+      onKeyDown={undefined}
       data-space-project={projectKey(project)}
-      className="group flex items-center gap-2 rounded-lg border border-transparent bg-foreground/4 px-2 py-2.5 hover:bg-foreground/8"
-      style={{ opacity: isDragging ? 0.25 : 1 }}
+      className={cn(
+        "group flex cursor-grab touch-manipulation select-none items-center gap-2 rounded-xl bg-foreground/5 py-1.5 pr-1 pl-0.5 hover:bg-foreground/9 active:cursor-grabbing",
+        isDragging && "opacity-40",
+      )}
     >
       <button
         ref={setActivatorNodeRef}
@@ -74,18 +126,11 @@ function SpaceProject({
         {...attributes}
         {...listeners}
         aria-label={`Drag ${project.title}`}
-        className="flex size-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
+        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 group-hover:text-muted-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <GripVerticalIcon aria-hidden className="size-3.5" />
       </button>
-      <ProjectFavicon project={project} className="size-5 shrink-0" />
-      <Tooltip>
-        <TooltipTrigger render={<div className="min-w-0 flex-1" />}>
-          <p className="truncate text-sm font-medium">{project.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{environmentLabel}</p>
-        </TooltipTrigger>
-        <TooltipPopup>{project.workspaceRoot}</TooltipPopup>
-      </Tooltip>
+      <ProjectSummary project={project} detail={detail} />
       <Menu>
         <MenuTrigger
           render={
@@ -95,12 +140,20 @@ function SpaceProject({
           <MoreHorizontalIcon aria-hidden />
         </MenuTrigger>
         <MenuPopup>
-          <MenuItem onClick={() => move(null)}>No Space</MenuItem>
-          {spaces.spaces.map((space) => (
-            <MenuItem key={space.id} onClick={() => move(space.id)}>
-              {space.name}
-            </MenuItem>
-          ))}
+          <MenuGroup>
+            <MenuGroupLabel>Move to</MenuGroupLabel>
+            <MenuRadioGroup
+              value={spaceId ?? "none"}
+              onValueChange={(next) => move(next === "none" ? null : next)}
+            >
+              {spaces.spaces.map((space) => (
+                <MenuRadioItem key={space.id} value={space.id}>
+                  {space.name}
+                </MenuRadioItem>
+              ))}
+              <MenuRadioItem value="none">No Space</MenuRadioItem>
+            </MenuRadioGroup>
+          </MenuGroup>
         </MenuPopup>
       </Menu>
     </div>
@@ -109,12 +162,14 @@ function SpaceProject({
 
 function SpaceColumn({
   space,
-  projects,
-  environmentLabels,
+  active,
+  count,
+  children,
 }: {
   space: Space | null;
-  projects: ReadonlyArray<EnvironmentProject>;
-  environmentLabels: ReadonlyMap<string, string>;
+  active: boolean;
+  count: number;
+  children: ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnKey(space?.id ?? null) });
   const selectSpace = useSelectSpace();
@@ -132,47 +187,61 @@ function SpaceColumn({
       } as CSSProperties)
     : undefined;
   return (
+    // The full-height section is the drop target; the visible card only grows with its projects.
     <section
       ref={setNodeRef}
       data-space-column={space?.id ?? "unassigned"}
       aria-label={`Projects in ${name}`}
-      className={`flex h-full w-72 shrink-0 flex-col rounded-2xl border bg-sidebar/60 p-4 ${isOver ? "border-ring ring-2 ring-ring/35" : "border-border/60"}`}
-      style={style}
+      className="flex w-72 shrink-0 flex-col"
     >
-      <header className="mb-5 flex items-center justify-between gap-2">
-        <h2 className="min-w-0 truncate text-sm font-semibold">
-          {space ? (
-            <button
-              type="button"
-              onClick={() => void selectSpace(space.id).catch(reportSpaceError)}
-              className="cursor-pointer rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-              aria-label={`Open Space ${name}`}
-            >
-              {name}
-            </button>
-          ) : (
-            name
-          )}
-        </h2>
-        <span className="text-xs text-muted-foreground">{projects.length}</span>
-      </header>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
-        {projects.map((project) => (
-          <SpaceProject
-            key={projectKey(project)}
-            project={project}
-            environmentLabel={
-              environmentLabels.get(project.environmentId) ?? "Disconnected environment"
-            }
-          />
-        ))}
-        {projects.length === 0 ? (
-          <p className="px-2 py-8 text-center text-xs text-muted-foreground">Drop a project here</p>
-        ) : null}
+      <div
+        className={cn(
+          "flex max-h-full min-h-0 flex-col rounded-2xl border p-2 transition-[border-color,box-shadow] duration-150",
+          space ? "bg-sidebar/60" : "border-dashed",
+          isOver ? "border-ring ring-2 ring-ring/30" : "border-border/60",
+        )}
+        style={style}
+      >
+        <header className="flex items-center gap-2 px-2 pt-1 pb-2">
+          <h2 className="min-w-0 flex-1 text-sm font-semibold">
+            {space ? (
+              <button
+                type="button"
+                onClick={() => void selectSpace(space.id).catch(reportSpaceError)}
+                aria-label={`Open Space ${name}`}
+                className="group/open flex max-w-full cursor-pointer items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <span
+                  aria-hidden
+                  className="size-2.5 shrink-0 rounded-full bg-muted-foreground/45"
+                  style={colors ? { backgroundColor: colors.accent } : undefined}
+                />
+                <span className="truncate">{name}</span>
+                <ArrowUpRightIcon
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/open:opacity-100 group-focus-visible/open:opacity-100"
+                />
+              </button>
+            ) : (
+              <span className="text-muted-foreground">{name}</span>
+            )}
+          </h2>
+          {active ? (
+            <span className="rounded-full bg-foreground/8 px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+              Current
+            </span>
+          ) : null}
+          <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+        </header>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+          {children}
+          {count === 0 ? (
+            <p className="rounded-xl border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
+              {space ? "Drag projects here" : "Projects outside a Space appear here"}
+            </p>
+          ) : null}
+        </div>
       </div>
-      <p className="mt-4 border-t border-border/40 pt-3 text-xs text-muted-foreground">
-        {space ? "Projects and their inherited threads" : "Projects outside a Space"}
-      </p>
     </section>
   );
 }
@@ -188,10 +257,16 @@ export function SpacesView() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+    useSensor(KeyboardSensor),
+  );
   const environmentLabels = new Map(
     environments.map((environment) => [environment.environmentId, environment.label]),
   );
+  // An environment label only helps tell projects apart when more than one is connected.
+  const showEnvironment = new Set(projects.map((project) => project.environmentId)).size > 1;
   const columns = [...spaces.spaces, null];
   const dragEnd = (event: DragEndEvent) => {
     setDragged(null);
@@ -207,7 +282,12 @@ export function SpacesView() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden">
       <WorkspacePageHeader electron={isElectron}>
-        <h1 className="min-w-0 flex-1 text-sm font-medium">Spaces</h1>
+        <div className="flex min-w-0 flex-1 items-baseline gap-3">
+          <h1 className="shrink-0 text-sm font-medium">Spaces</h1>
+          <p className="hidden truncate text-xs text-muted-foreground md:block">
+            Drag projects between Spaces. Threads follow their project unless moved on their own.
+          </p>
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -221,9 +301,6 @@ export function SpacesView() {
           New Space
         </Button>
       </WorkspacePageHeader>
-      <p className="shrink-0 px-6 pt-4 text-sm text-muted-foreground">
-        Drag projects between Spaces to move their context.
-      </p>
       <DndContext
         accessibility={{
           announcements: {
@@ -251,42 +328,53 @@ export function SpacesView() {
         onDragEnd={dragEnd}
         onDragCancel={() => setDragged(null)}
       >
-        <div className="flex min-h-0 flex-1 gap-5 overflow-x-auto p-6" aria-label="Space projects">
-          {columns.map((space) => (
-            <SpaceColumn
-              key={columnKey(space?.id ?? null)}
-              space={space}
-              projects={projects.filter(
-                (project) =>
-                  resolveProjectSpace(
-                    spaces,
-                    scopeProjectRef(project.environmentId, project.id),
-                  ) === (space?.id ?? null),
-              )}
-              environmentLabels={environmentLabels}
-            />
-          ))}
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            aria-label="Create a Space"
-            className="flex w-24 shrink-0 items-center justify-center self-stretch rounded-2xl border border-dashed border-border text-muted-foreground hover:bg-accent/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <PlusIcon aria-hidden className="size-6" />
-          </button>
+        <div
+          className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-6 pt-2 pb-6"
+          aria-label="Space projects"
+        >
+          {columns.map((space) => {
+            const spaceId = space?.id ?? null;
+            const members = projects.filter(
+              (project) =>
+                resolveProjectSpace(spaces, scopeProjectRef(project.environmentId, project.id)) ===
+                spaceId,
+            );
+            return (
+              <SpaceColumn
+                key={columnKey(spaceId)}
+                space={space}
+                active={space !== null && spaces.activeSpaceId === spaceId}
+                count={members.length}
+              >
+                {members.map((project) => (
+                  <SpaceProject
+                    key={projectKey(project)}
+                    project={project}
+                    spaceId={spaceId}
+                    detail={
+                      showEnvironment
+                        ? (environmentLabels.get(project.environmentId) ??
+                          "Disconnected environment")
+                        : undefined
+                    }
+                  />
+                ))}
+              </SpaceColumn>
+            );
+          })}
         </div>
         <DragOverlay dropAnimation={null}>
           {dragged ? (
-            <div className="w-64 rounded-lg border border-ring bg-popover px-4 py-3 text-sm font-medium text-popover-foreground shadow-lg">
-              {dragged.title}
+            <div className="flex w-68 cursor-grabbing items-center gap-2 rounded-xl border bg-popover py-2 pr-3 pl-2.5 text-popover-foreground shadow-lg">
+              <ProjectSummary project={dragged} />
             </div>
           ) : null}
         </DragOverlay>
       </DndContext>
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogPopup>
-          <DialogTitle>Create a Space</DialogTitle>
+        <DialogPopup className="sm:max-w-sm">
           <form
+            className="flex min-h-0 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               if (!name.trim() || saving) return;
@@ -301,16 +389,18 @@ export function SpacesView() {
                 .finally(() => setSaving(false));
             }}
           >
-            <label htmlFor="new-space-name" className="mb-2 block text-sm">
-              Name
-            </label>
-            <Input
-              id="new-space-name"
-              value={name}
-              onChange={(event) => setName(event.currentTarget.value)}
-              placeholder="Work, writing, personal…"
-              autoFocus
-            />
+            <DialogHeader>
+              <DialogTitle>Create a Space</DialogTitle>
+            </DialogHeader>
+            <DialogPanel>
+              <Input
+                aria-label="Name"
+                value={name}
+                onChange={(event) => setName(event.currentTarget.value)}
+                placeholder="Work, writing, personal…"
+                autoFocus
+              />
+            </DialogPanel>
             <DialogFooter>
               <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
               <Button type="submit" disabled={!name.trim() || saving}>

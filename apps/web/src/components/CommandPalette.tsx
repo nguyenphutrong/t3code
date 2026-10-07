@@ -62,6 +62,7 @@ import {
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
+  Columns3Icon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderGit2Icon,
@@ -2376,8 +2377,8 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push({
     kind: "action",
     value: "spaces:manage",
-    title: "Spaces view",
-    icon: <SettingsIcon className={ITEM_ICON_CLASS} />,
+    title: "Spaces overview",
+    icon: <Columns3Icon className={ITEM_ICON_CLASS} />,
     searchTerms: ["spaces", "create", "rename", "delete", "theme"],
     run: async () => {
       setOpen(false);
