@@ -140,6 +140,18 @@ export function selectSpace(state: SpacesState, spaceId: string | null): SpacesS
   };
 }
 
+export function cycleSpace(state: SpacesState, direction: 1 | -1): SpacesState {
+  if (state.spaces.length === 0) {
+    return state;
+  }
+  const spaceIds = [null, ...state.spaces.map((space) => space.id)];
+  const index = Math.max(0, spaceIds.indexOf(state.activeSpaceId));
+  return selectSpace(
+    state,
+    spaceIds[(index + direction + spaceIds.length) % spaceIds.length] ?? null,
+  );
+}
+
 export function rememberSpaceThread(state: SpacesState, thread: ScopedThreadRef): SpacesState {
   return {
     ...state,

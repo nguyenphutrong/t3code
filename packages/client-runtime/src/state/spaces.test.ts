@@ -7,6 +7,7 @@ import {
   assignProjectSpace,
   assignThreadSpace,
   createSpace,
+  cycleSpace,
   filterSpaceEntities,
   rememberSpaceThread,
   removeSpace,
@@ -135,5 +136,19 @@ describe("Spaces membership", () => {
     ).toEqual(threadRef);
     expect(selectSpace(renamed, "missing").activeSpaceId).toBeNull();
     expect(updateSpace(renamed, "work", { name: " " })).toEqual(renamed);
+  });
+
+  it("cycles through All Spaces and named Spaces in both directions", () => {
+    expect(cycleSpace(state, 1).activeSpaceId).toBe("work");
+    expect(cycleSpace(selectSpace(state, "work"), 1).activeSpaceId).toBe("personal");
+    expect(cycleSpace(selectSpace(state, "personal"), 1).activeSpaceId).toBeNull();
+    expect(cycleSpace(state, -1).activeSpaceId).toBe("personal");
+    expect(cycleSpace(selectSpace(state, "personal"), -1).activeSpaceId).toBe("work");
+    expect(cycleSpace(selectSpace(state, "work"), -1).activeSpaceId).toBeNull();
+  });
+
+  it("keeps an empty Spaces configuration unchanged when cycling", () => {
+    expect(cycleSpace(DEFAULT_SPACES_STATE, 1)).toBe(DEFAULT_SPACES_STATE);
+    expect(cycleSpace(DEFAULT_SPACES_STATE, -1)).toBe(DEFAULT_SPACES_STATE);
   });
 });
