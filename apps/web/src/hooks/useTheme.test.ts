@@ -204,3 +204,25 @@ describe("theme failure handling", () => {
     }
   });
 });
+
+describe("Space theme overlay", () => {
+  it("restores global theme preferences without writing them on Space switches", async () => {
+    const storage = createStorage();
+    storage.setItem("t3code:theme", "dark");
+    storage.setItem("t3code:theme-appearance-mode", "dark");
+    vi.stubGlobal("window", { localStorage: storage, matchMedia: () => ({ matches: false }) });
+    vi.doMock("react", () => ({
+      useCallback: <A>(callback: A) => callback,
+      useEffect: () => undefined,
+      useSyncExternalStore: (_subscribe: unknown, read: () => unknown) => read(),
+    }));
+    const { setSpaceThemeOverlay, useTheme, readThemePreference } = await import("./useTheme");
+    setSpaceThemeOverlay("light");
+    expect(useTheme().theme).toBe("light");
+    expect(useTheme().resolvedTheme).toBe("light");
+    expect(readThemePreference()).toBe("dark");
+    setSpaceThemeOverlay(null);
+    expect(useTheme().theme).toBe("dark");
+    expect(readThemePreference()).toBe("dark");
+  });
+});

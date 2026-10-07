@@ -1,3 +1,5 @@
+import { resolveThreadSpace } from "@t3tools/client-runtime/state/spaces";
+import { assignCreatedThreadSpace, captureActiveSpace, useSpaceEntities } from "./useSpaces";
 import { useAtomValue } from "@effect/atom-react";
 import {
   scopedProjectKey,
@@ -23,7 +25,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { readProjects, readThreadShell, useProjects, useThreadShell } from "../state/entities";
+import { readProjects, readThreadShell, useThreadShell } from "../state/entities";
 import {
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
@@ -33,7 +35,7 @@ import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
-import { useClientSettings } from "./useSettings";
+import { getClientSettings, useClientSettings } from "./useSettings";
 
 interface NewThreadWorkspaceOptions {
   branch?: string | null;
@@ -72,11 +74,20 @@ export function useNewThreadHandler() {
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
         replace?: boolean;
+        spaceId?: string | null;
       },
       // Which draft the thread ended up in, so a caller that has something to put in it — a
       // prepared checkout, a task to write — addresses that one rather than looking the project
       // up again and finding whichever draft it happens to hold.
     ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
+      const spaceId = options?.spaceId !== undefined ? options.spaceId : captureActiveSpace();
+      const matchesSpace = (draft: DraftThreadState) =>
+        spaceId === null ||
+        resolveThreadSpace(getClientSettings().spaces, {
+          environmentId: draft.environmentId,
+          id: draft.threadId,
+          projectId: draft.projectId,
+        }) === spaceId;
       const projects = readProjects();
       const targetServerSettings =
         environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
@@ -190,6 +201,7 @@ export function useNewThreadHandler() {
       // drafts rather than deleting them.
       const emptyStoredDraftThread =
         reusableStoredDraftThread &&
+        matchesSpace(reusableStoredDraftThread) &&
         !composerDraftHasUserContent(getComposerDraft(reusableStoredDraftThread.draftId))
           ? reusableStoredDraftThread
           : null;
@@ -331,6 +343,7 @@ export function useNewThreadHandler() {
         currentRouteTarget?.kind === "draft" &&
         latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
         latestActiveDraftThread.promotedTo == null &&
+        matchesSpace(latestActiveDraftThread) &&
         // Same content rule as above: a new-thread request while viewing an
         // invested draft mints a fresh one instead of repurposing it.
         !composerDraftHasUserContent(getComposerDraft(currentRouteTarget.draftId))
@@ -364,6 +377,12 @@ export function useNewThreadHandler() {
         if (routeChangedSinceRequest()) {
           return null;
         }
+        await assignCreatedThreadSpace(
+          scopeThreadRef(projectRef.environmentId, threadId),
+          spaceId,
+          projectRef.projectId,
+        );
+        if (routeChangedSinceRequest()) return null;
         // The await yields, so a concurrent invocation may have registered a
         // draft for this logical project in the meantime. Registering ours
         // too would evict that draft while its navigation is in flight —
@@ -376,6 +395,7 @@ export function useNewThreadHandler() {
           // to reuse is still mapped at this point — reusing it here would
           // silently undo mint-fresh semantics.
           racedDraft.draftId !== storedDraftThread?.draftId &&
+          matchesSpace(racedDraft) &&
           readThreadShell(scopeThreadRef(racedDraft.environmentId, racedDraft.threadId)) === null
         ) {
           // Same remap the reuse paths above perform: point the draft at the
@@ -451,7 +471,7 @@ export function useHandleNewThread() {
         : useComposerDraftStore.getState().getDraftSession(routeTarget.draftId)
       : null,
   );
-  const projects = useProjects();
+  const { projects } = useSpaceEntities();
   const orderedProjects = useMemo(() => {
     return orderItemsByPreferredIds({
       items: projects,

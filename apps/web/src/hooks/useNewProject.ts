@@ -1,3 +1,4 @@
+import { assignCreatedProjectSpace, captureActiveSpace } from "./useSpaces";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { getNewProjectGitHubRepository } from "@t3tools/client-runtime/operations/projects";
 import {
@@ -79,6 +80,7 @@ export function useNewProject() {
       readonly name: string;
       readonly github: { readonly account: string | null } | null;
     }): Promise<boolean> => {
+      const spaceId = captureActiveSpace();
       const result = await createNew({
         environmentId: input.environmentId,
         input: { name: input.name },
@@ -118,6 +120,7 @@ export function useNewProject() {
       }
 
       const projectRef = scopeProjectRef(input.environmentId, projectId);
+      await assignCreatedProjectSpace(projectRef, spaceId);
       // Drafts key off the project's stored path, so wait for the create event
       // to reach the store before opening one.
       const project = await waitForProject(projectRef).catch((error: unknown) => {
@@ -131,7 +134,7 @@ export function useNewProject() {
         return null;
       });
       if (project === null) return true;
-      await handleNewThread(projectRef).catch((error: unknown) => {
+      await handleNewThread(projectRef, { spaceId }).catch((error: unknown) => {
         toastManager.add(
           stackedThreadToast({
             type: "error",
