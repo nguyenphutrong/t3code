@@ -1,0 +1,94 @@
+# Unsigned macOS build of the fork, published as a GitHub Release.
+# Push a tag like `fork-v0.0.46-spaces.1` from `dev`; the part after `fork-v`
+# becomes the app version. The app gets its own bundle id so macOS privacy
+# grants don't collide with an installed upstream T3 Code.
+name: Fork Release
+
+on:
+  push:
+    tags:
+      - "fork-v*"
+
+permissions:
+  contents: write
+
+env:
+  BUNDLE_ID: com.t3tools.t3code.local
+  APP_NAME: T3 Code (Local)
+
+jobs:
+  macos:
+    name: Build macOS arm64
+    if: github.repository == 'nguyenphutrong/t3code'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Build
+        run: |
+          version="${GITHUB_REF_NAME#fork-v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$version"
+
+      # Same steps as the local `t3-local-app` script. Keep CFBundleName:
+      # Electron finds "<CFBundleName> Helper.app" at launch and aborts without it.
+      - name: Rebrand bundle id
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/app"
+          mkdir -p "$work"
+          ditto -x -k release/T3-Code-*-arm64.zip "$work"
+          src=$(find "$work" -maxdepth 1 -name "*.app" | head -1)
+          app="$work/$APP_NAME.app"
+          mv "$src" "$app"
+
+          set_plist() {
+            /usr/libexec/PlistBuddy -c "Set :$2 $3" "$1" 2>/dev/null ||
+              /usr/libexec/PlistBuddy -c "Add :$2 string $3" "$1"
+          }
+          set_plist "$app/Contents/Info.plist" CFBundleIdentifier "$BUNDLE_ID"
+          set_plist "$app/Contents/Info.plist" CFBundleDisplayName "$APP_NAME"
+          for helper in "$app"/Contents/Frameworks/*.app; do
+            plist="$helper/Contents/Info.plist"
+            helper_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$plist")
+            set_plist "$plist" CFBundleIdentifier "${BUNDLE_ID}${helper_id#com.t3tools.t3code}"
+          done
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+
+          mkdir -p out
+          ditto -c -k --keepParent "$app" "out/T3-Code-Local-$VERSION-arm64.zip"
+          hdiutil create -volname "$APP_NAME" -srcfolder "$app" -ov -format UDZO "out/T3-Code-Local-$VERSION-arm64.dmg"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --title "T3 Code (Local) $VERSION" \
+            --notes "Unsigned build of \`dev\` at ${GITHUB_SHA::10}. macOS blocks unsigned downloads; after copying the app to /Applications run:
+
+          \`\`\`
+          xattr -dr com.apple.quarantine \"/Applications/$APP_NAME.app\"
+          \`\`\`"
