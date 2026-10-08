@@ -1,3 +1,5 @@
+import { SpacesControl } from "../spaces/SpacesControl";
+import { useSpaceEntities, useSpacePendingTasks, useMobileSpaces } from "../../state/spaces";
 import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { computeThreadMoveAvailability } from "./threadOrder";
@@ -93,6 +95,7 @@ interface ThreadNavigationSidebarProps {
   readonly onNewThreadOnBranch: (thread: EnvironmentThreadShell) => void;
   readonly onNewThreadInProject: (project: EnvironmentProject) => void;
   readonly onSearchQueryChange: (query: string) => void;
+  readonly onEmptySpace: () => void;
   readonly onSelectThread: (thread: EnvironmentThreadShell) => void;
   readonly onRequestVisibility: () => void;
   readonly searchQuery: string;
@@ -136,8 +139,10 @@ function ThreadNavigationSidebarPane(
 
   const insets = useSafeAreaInsets();
   const { fabClearance } = useAndroidControlSizing();
-  const projects = useProjects();
-  const threads = useNavigationThreadShells();
+  const allProjects = useProjects();
+  const allThreads = useNavigationThreadShells();
+  const { projects, threads } = useSpaceEntities(allProjects, allThreads);
+  const { state: spaces } = useMobileSpaces();
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const searchInputRef = useRef<TextInputInstance>(null);
@@ -158,7 +163,7 @@ function ThreadNavigationSidebarPane(
     renameThread,
     regenerateThreadTitle,
   } = useThreadListActions();
-  const pendingTasks = usePendingNewTasks();
+  const pendingTasks = useSpacePendingTasks(usePendingNewTasks());
   const queuedThreadKeys = useQueuedThreadKeys();
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(
@@ -191,7 +196,21 @@ function ThreadNavigationSidebarPane(
           : [],
     [options.selectedEnvironmentId, workspaceEnvironments],
   );
-  const threadSearch = useThreadSearch(searchEnvironmentIds, props.searchQuery);
+  const searchScope = useMemo(
+    () =>
+      spaces.activeSpaceId === null
+        ? undefined
+        : Object.fromEntries(
+            searchEnvironmentIds.map((environmentId) => [
+              environmentId,
+              threads
+                .filter((thread) => thread.environmentId === environmentId)
+                .map((thread) => thread.id),
+            ]),
+          ),
+    [spaces.activeSpaceId, searchEnvironmentIds, threads],
+  );
+  const threadSearch = useThreadSearch(searchEnvironmentIds, props.searchQuery, searchScope);
   const threadSearchMatchByKey = useMemo(() => {
     const matches = new Map<string, EnvironmentThreadSearchMatch>();
     for (const match of threadSearch.matches) {
@@ -279,7 +298,7 @@ function ThreadNavigationSidebarPane(
   const [settledVisibleCount, setSettledVisibleCount] = useState(
     THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   );
-  const settledResetKey = `${options.selectedEnvironmentId ?? "all"}:${selectedProjectKey ?? "all"}:${props.searchQuery.trim()}`;
+  const settledResetKey = `${spaces.activeSpaceId ?? "all"}:${options.selectedEnvironmentId ?? "all"}:${selectedProjectKey ?? "all"}:${props.searchQuery.trim()}`;
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -958,6 +977,7 @@ function ThreadNavigationSidebarPane(
               />
             </GestureDetector>
           </SwipeableScrollGateProvider>
+          <SpacesControl onSelectThread={props.onSelectThread} onEmptySpace={props.onEmptySpace} />
         </View>
       </>
     );
@@ -1026,6 +1046,7 @@ function ThreadNavigationSidebarPane(
         )}
       </View>
 
+      <SpacesControl onSelectThread={props.onSelectThread} onEmptySpace={props.onEmptySpace} />
       {Platform.OS === "android" ? (
         <MaterialThreadListToolbar
           sidebar

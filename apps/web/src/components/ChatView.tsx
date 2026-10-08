@@ -1,3 +1,7 @@
+import type { DraftThreadState } from "../composerDraftStore";
+import { getClientSettings } from "../hooks/useSettings";
+import { resolveThreadSpace } from "@t3tools/client-runtime/state/spaces";
+import { assignCreatedThreadSpace, captureActiveSpace, updateSpaces } from "../hooks/useSpaces";
 import { ChatCanvas } from "./chat/ChatCanvas";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
 import {
@@ -2841,7 +2845,12 @@ export default function ChatView(props: ChatViewProps) {
   }, []);
 
   const openOrReuseProjectDraftThread = useCallback(
-    async (input: { branch: string; worktreePath: string | null; envMode: DraftThreadEnvMode }) => {
+    async (input: {
+      branch: string;
+      worktreePath: string | null;
+      envMode: DraftThreadEnvMode;
+      spaceId: string | null;
+    }) => {
       if (!activeProject) {
         throw new Error("No active project is available for this pull request.");
       }
@@ -2850,8 +2859,15 @@ export default function ChatView(props: ChatViewProps) {
         activeProject,
         projectGroupingSettings,
       );
+      const matchesSpace = (session: DraftThreadState) =>
+        input.spaceId === null ||
+        resolveThreadSpace(getClientSettings().spaces, {
+          environmentId: session.environmentId,
+          id: session.threadId,
+          projectId: session.projectId,
+        }) === input.spaceId;
       const storedDraftSession = getDraftSessionByLogicalProjectKey(logicalProjectKey);
-      if (storedDraftSession) {
+      if (storedDraftSession && matchesSpace(storedDraftSession)) {
         setDraftThreadContext(storedDraftSession.draftId, input);
         setLogicalProjectDraftThreadId(
           logicalProjectKey,
@@ -2875,6 +2891,7 @@ export default function ChatView(props: ChatViewProps) {
       if (
         !isServerThread &&
         activeDraftSession?.logicalProjectKey === logicalProjectKey &&
+        matchesSpace(activeDraftSession) &&
         draftId
       ) {
         setDraftThreadContext(draftId, input);
@@ -2898,6 +2915,11 @@ export default function ChatView(props: ChatViewProps) {
         interactionMode: DEFAULT_INTERACTION_MODE,
         ...input,
       });
+      await assignCreatedThreadSpace(
+        scopeThreadRef(activeProjectRef.environmentId, nextThreadId),
+        input.spaceId,
+        activeProjectRef.projectId,
+      );
       await navigate({
         to: "/draft/$draftId",
         params: buildDraftThreadRouteParams(nextDraftId),
@@ -2920,11 +2942,12 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   const handlePreparedPullRequestThread = useCallback(
-    async (input: { branch: string; worktreePath: string | null }) => {
+    async (input: { branch: string; worktreePath: string | null; spaceId: string | null }) => {
       await openOrReuseProjectDraftThread({
         branch: input.branch,
         worktreePath: input.worktreePath,
         envMode: input.worktreePath ? "worktree" : "local",
+        spaceId: input.spaceId,
       });
     },
     [openOrReuseProjectDraftThread],
@@ -8496,6 +8519,7 @@ export default function ChatView(props: ChatViewProps) {
   const onForkFromRun = useCallback(
     async (input: { readonly sourceThreadId: ThreadId; readonly runId: RunId }) => {
       if (!activeThread || activeEnvironmentUnavailable) return;
+      const spaceId = captureActiveSpace();
       const targetThreadId = newThreadId();
       const targetThreadRef = scopeThreadRef(environmentId, targetThreadId);
       const result = await forkThreadFromRun({
@@ -8517,6 +8541,7 @@ export default function ChatView(props: ChatViewProps) {
         }
         return;
       }
+      await assignCreatedThreadSpace(targetThreadRef, spaceId, activeThread.projectId);
       const targetThreadReady = await waitForThreadShell(targetThreadRef);
       if (!targetThreadReady) {
         setThreadError(
@@ -8631,6 +8656,7 @@ export default function ChatView(props: ChatViewProps) {
     },
   ) => {
     e?.preventDefault();
+    const spaceIdAtSend = captureActiveSpace();
     const keepFullHistory = keepFullHistoryOnceRef.current;
     // Typed out in full rather than picked from the menu. Attachments or contexts
     // mean the user is sending a prompt, so those go through as usual.
@@ -9409,6 +9435,11 @@ export default function ChatView(props: ChatViewProps) {
               const supportsInlineMessageContext =
                 appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
                   .capabilities.inlineMessageContext === true;
+              await assignCreatedThreadSpace(
+                scopeThreadRef(environmentId, targetThreadId),
+                spaceIdAtSend,
+                activeProject.id,
+              );
               requestMayHaveStarted = true;
               const result = await startThreadTurn({
                 environmentId,
@@ -9766,6 +9797,10 @@ export default function ChatView(props: ChatViewProps) {
 
     let backgroundDraftOpened = false;
     let turnStartSucceeded = false;
+    if (failure === null && isLocalDraftThread) {
+      const spacesResult = await settlePromise(() => updateSpaces((state) => state));
+      if (spacesResult._tag === "Failure") failure = spacesResult;
+    }
     if (failure === null && turnAttachmentsResult._tag === "Success") {
       const bootstrap =
         isLocalDraftThread || baseBranchForWorktree
@@ -10437,6 +10472,7 @@ export default function ChatView(props: ChatViewProps) {
     } = sendCtx;
 
     const createdAt = new Date().toISOString();
+    const spaceId = captureActiveSpace();
     const nextThreadId = newThreadId();
     const planMarkdown = activeProposedPlan.planMarkdown;
     const implementationPrompt = buildPlanImplementationPrompt(planMarkdown);
@@ -10474,6 +10510,16 @@ export default function ChatView(props: ChatViewProps) {
     let failure: AtomCommandResult<unknown, unknown> | null =
       createResult._tag === "Failure" ? createResult : null;
 
+    if (failure === null) {
+      const spacesResult = await settlePromise(() =>
+        assignCreatedThreadSpace(
+          scopeThreadRef(environmentId, nextThreadId),
+          spaceId,
+          activeProject.id,
+        ),
+      );
+      if (spacesResult._tag === "Failure") failure = spacesResult;
+    }
     if (failure === null) {
       const startResult = await startThreadTurn({
         environmentId,

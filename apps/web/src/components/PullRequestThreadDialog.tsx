@@ -1,3 +1,4 @@
+import { captureActiveSpace } from "../hooks/spacesPersistence";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
@@ -41,7 +42,11 @@ interface PullRequestThreadDialogProps {
   cwd: string | null;
   initialReference: string | null;
   onOpenChange: (open: boolean) => void;
-  onPrepared: (input: { branch: string; worktreePath: string | null }) => Promise<void> | void;
+  onPrepared: (input: {
+    branch: string;
+    worktreePath: string | null;
+    spaceId: string | null;
+  }) => Promise<void> | void;
 }
 
 export function PullRequestThreadDialog({
@@ -155,6 +160,7 @@ export function PullRequestThreadDialog({
       if (!parsedReference || !resolvedPullRequest || !cwd) {
         return;
       }
+      const spaceId = captureActiveSpace();
       setPrepareErrorMessage(null);
       setPreparingMode(mode);
       const result = await preparePullRequestThreadAction.run({
@@ -179,6 +185,7 @@ export function PullRequestThreadDialog({
       await onPrepared({
         branch: result.value.branch,
         worktreePath: result.value.worktreePath,
+        spaceId,
       });
       onOpenChange(false);
     },

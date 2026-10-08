@@ -600,6 +600,7 @@ function AdaptiveWorkspaceLayoutContent(
                       onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
                       onNewThreadInProject={handleNewThreadInProject}
                       onNewThreadOnBranch={handleNewThreadOnBranch}
+                      onEmptySpace={() => navigation.navigate("Home")}
                       onSelectThread={handleSelectThread}
                       onSearchQueryChange={setPrimarySidebarSearchQuery}
                       searchQuery={primarySidebarSearchQuery}

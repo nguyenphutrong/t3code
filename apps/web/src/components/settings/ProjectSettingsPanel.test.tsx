@@ -96,7 +96,8 @@ vi.mock("~/state/use-atom-command", () => ({
   ) => state[command],
 }));
 vi.mock("~/hooks/useSettings", () => ({
-  useClientSettings: () => DEFAULT_CLIENT_SETTINGS,
+  useClientSettings: (select?: (settings: typeof DEFAULT_CLIENT_SETTINGS) => unknown) =>
+    select ? select(DEFAULT_CLIENT_SETTINGS) : DEFAULT_CLIENT_SETTINGS,
   useUpdateClientSettings: () => state.updateClientSettings,
   usePrimarySettings: () => DEFAULT_SERVER_SETTINGS,
   useEnvironmentSettings: () => DEFAULT_SERVER_SETTINGS,

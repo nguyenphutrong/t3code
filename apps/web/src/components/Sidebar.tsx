@@ -1,3 +1,11 @@
+import {
+  useSpaceEntities,
+  threadSpaceMenu,
+  isSpaceMenuAction,
+  runThreadSpaceAction,
+  reportSpaceError,
+} from "../hooks/useSpaces";
+import { isThreadInSpace } from "@t3tools/client-runtime/state/spaces";
 import { type EnvironmentId } from "@t3tools/contracts";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
 import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
@@ -149,12 +157,7 @@ import {
   useEnvironmentMachines,
   usePrimaryEnvironmentId,
 } from "../state/environments";
-import {
-  readThreadShell,
-  useAllEnvironmentProjectSnapshotsReady,
-  useProjects,
-  useThreadShells,
-} from "../state/entities";
+import { readThreadShell, useAllEnvironmentProjectSnapshotsReady } from "../state/entities";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
@@ -968,6 +971,7 @@ const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
 }) {
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
   const draftsByThreadKey = useComposerDraftStore((store) => store.draftsByThreadKey);
+  const spaces = useClientSettings((settings) => settings.spaces);
   // The open draft's row is FROZEN at the moment the draft became the route:
   // it stays visible (like a thread row) but never repaints while the user
   // types. A draft that was never navigated away from has no snapshot to
@@ -998,7 +1002,14 @@ const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
     // new-thread surfaces mint fresh drafts and leave invested ones behind
     // unmapped, so the mapping only knows about the latest per project.
     for (const [draftKey, session] of Object.entries(draftThreadsByThreadKey)) {
-      if (session.promotedTo != null) {
+      if (
+        session.promotedTo != null ||
+        !isThreadInSpace(spaces, {
+          environmentId: session.environmentId,
+          id: session.threadId,
+          projectId: session.projectId,
+        })
+      ) {
         continue;
       }
       if (
@@ -1027,6 +1038,7 @@ const SidebarDraftBlock = memo(function SidebarDraftBlock(props: {
   }, [
     draftThreadsByThreadKey,
     draftsByThreadKey,
+    spaces,
     frozenActive,
     props.routeDraftId,
     props.scopedProjectKeys,
@@ -2368,9 +2380,8 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
-  const projects = useProjects();
+  const { projects, threads, spaces } = useSpaceEntities();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
-  const threads = useThreadShells();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -2649,10 +2660,20 @@ export default function Sidebar() {
   // or disconnected environments cannot establish that the project is gone.
   const allProjectSnapshotsReady = useAllEnvironmentProjectSnapshotsReady();
   useEffect(() => {
-    if (projectScopeKey !== null && allProjectSnapshotsReady && scopedProjectGroup === null) {
+    if (
+      projectScopeKey !== null &&
+      (allProjectSnapshotsReady || spaces.activeSpaceId !== null) &&
+      scopedProjectGroup === null
+    ) {
       setProjectScopeKey(null);
     }
-  }, [allProjectSnapshotsReady, projectScopeKey, scopedProjectGroup, setProjectScopeKey]);
+  }, [
+    allProjectSnapshotsReady,
+    projectScopeKey,
+    scopedProjectGroup,
+    setProjectScopeKey,
+    spaces.activeSpaceId,
+  ]);
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -2663,7 +2684,14 @@ export default function Sidebar() {
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
     let count = 0;
     for (const [draftKey, session] of Object.entries(store.draftThreadsByThreadKey)) {
-      if (session.promotedTo != null) {
+      if (
+        session.promotedTo != null ||
+        !isThreadInSpace(spaces, {
+          environmentId: session.environmentId,
+          id: session.threadId,
+          projectId: session.projectId,
+        })
+      ) {
         continue;
       }
       if (!composerDraftHasUserContent(store.draftsByThreadKey[draftKey])) {
@@ -2683,7 +2711,7 @@ export default function Sidebar() {
   // hidden now, and bulk actions must never count or touch invisible rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKey, spaces.activeSpaceId]);
 
   const openProjectSettings = useCallback(
     (projectGroup: SidebarProjectSnapshot) => {
@@ -2878,7 +2906,21 @@ export default function Sidebar() {
   );
   const searchEnvironmentIds = useConnectedEnvironmentIds();
   // useThreadSearch owns the debounce and the two-character floor.
-  const threadSearch = useThreadSearch(searchEnvironmentIds, threadSearchQuery);
+  const searchThreadIds = useMemo(
+    () =>
+      spaces.activeSpaceId === null
+        ? undefined
+        : Object.fromEntries(
+            searchEnvironmentIds.map((id) => [
+              id,
+              searchableThreads
+                .filter((thread) => thread.environmentId === id)
+                .map((thread) => thread.id),
+            ]),
+          ),
+    [searchEnvironmentIds, searchableThreads, spaces.activeSpaceId],
+  );
+  const threadSearch = useThreadSearch(searchEnvironmentIds, threadSearchQuery, searchThreadIds);
   const threadSearchMatchByKey = useMemo(
     () =>
       new Map(threadSearch.matches.map((match) => [threadSearchMatchKey(match), match] as const)),
@@ -4503,15 +4545,25 @@ export default function Sidebar() {
           projectByKey.get(`${session.environmentId}:${session.projectId}`)?.workspaceRoot;
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
-            buildDraftActionMenuItems({
-              hasPath: Boolean(workspacePath),
-              hasBranch: Boolean(session.branch),
-              hasProject: projectGroup != null,
-            }),
+            [
+              threadSpaceMenu(scopeThreadRef(session.environmentId, session.threadId)),
+              ...buildDraftActionMenuItems({
+                hasPath: Boolean(workspacePath),
+                hasBranch: Boolean(session.branch),
+                hasProject: projectGroup != null,
+              }),
+            ],
             position,
           ),
         );
         if (clicked._tag === "Failure") return;
+        if (clicked.value && isSpaceMenuAction(clicked.value)) {
+          await runThreadSpaceAction(
+            scopeThreadRef(session.environmentId, session.threadId),
+            clicked.value,
+          ).catch(reportSpaceError);
+          return;
+        }
         switch (clicked.value) {
           case "project-settings":
             if (projectGroup) openProjectSettings(projectGroup);
@@ -4584,38 +4636,45 @@ export default function Sidebar() {
           ) ?? null;
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
-            buildThreadActionMenuItems({
-              canOperate: readEnvironmentScope(
-                threadRef.environmentId,
-                AuthOrchestrationOperateScope,
-              ),
-              branch: thread.branch ?? null,
-              projectFilter: threadProjectGroup
-                ? {
-                    label: threadProjectGroup.displayName,
-                    isActive: projectScopeKey === threadProjectGroup.projectKey,
-                  }
-                : null,
-              isPinned,
-              isSettled,
-              autoSettleEnabled: thread.autoSettleDisabledAt == null,
-              isSnoozed,
-              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
-              isRegeneratingTitle,
-              isRunning: !threadRuntimeCanArchive(thread.runtime),
-              supports: {
-                settlement: supportsSettlement,
-                autoSettleOptOut: supportsAutoSettleOptOut,
-                snooze: supportsSnooze,
-                pinning: supportsPinning,
-                titleRegeneration: supportsTitleRegeneration,
-              },
-              snoozePresets,
-            }),
+            [
+              threadSpaceMenu(threadRef),
+              ...buildThreadActionMenuItems({
+                canOperate: readEnvironmentScope(
+                  threadRef.environmentId,
+                  AuthOrchestrationOperateScope,
+                ),
+                branch: thread.branch ?? null,
+                projectFilter: threadProjectGroup
+                  ? {
+                      label: threadProjectGroup.displayName,
+                      isActive: projectScopeKey === threadProjectGroup.projectKey,
+                    }
+                  : null,
+                isPinned,
+                isSettled,
+                autoSettleEnabled: thread.autoSettleDisabledAt == null,
+                isSnoozed,
+                canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+                isRegeneratingTitle,
+                isRunning: !threadRuntimeCanArchive(thread.runtime),
+                supports: {
+                  settlement: supportsSettlement,
+                  autoSettleOptOut: supportsAutoSettleOptOut,
+                  snooze: supportsSnooze,
+                  pinning: supportsPinning,
+                  titleRegeneration: supportsTitleRegeneration,
+                },
+                snoozePresets,
+              }),
+            ],
             position,
           ),
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
+        if (isSpaceMenuAction(clicked.value)) {
+          await runThreadSpaceAction(threadRef, clicked.value).catch(reportSpaceError);
+          return;
+        }
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
