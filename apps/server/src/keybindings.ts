@@ -15,6 +15,7 @@ import {
   MAX_KEYBINDINGS_COUNT,
   ResolvedKeybindingRule,
   ResolvedKeybindingsConfig,
+  THREAD_JUMP_KEYBINDING_COMMANDS,
   type ServerRemoveKeybindingInput,
   type ServerUpsertKeybindingInput,
   type ServerConfigIssue,
@@ -108,10 +109,11 @@ function isSameKeybindingRule(left: KeybindingRule, right: KeybindingRule): bool
 // that command. Backfill skips commands a config already has, so startup adds
 // each rule once per config, only next to the untouched earlier default
 // (`alongside`), and records its id. Customized commands and later removals
-// stay as the user set them.
+// stay as the user set them. An anchor can change only when its new rule fits.
 const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
   readonly id: string;
   readonly alongside: KeybindingRule;
+  readonly replacementAlongside?: KeybindingRule;
   readonly rule: KeybindingRule;
 }> = [
   {
@@ -127,6 +129,12 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
       when: "composerFocus && draftThreadRoute",
     },
   },
+  ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
+    id: `${command}:platform-shortcuts`,
+    alongside: { key: `mod+${index + 1}`, command, when: "isDesktop" },
+    replacementAlongside: { key: `mod+${index + 1}`, command, when: "isDesktop && isMac" },
+    rule: { key: `mod+alt+${index + 1}`, command, when: "isDesktop && !isMac" },
+  })),
 ];
 
 function keybindingShortcutContext(rule: KeybindingRule): string | null {
@@ -605,7 +613,16 @@ const make = Effect.gen(function* () {
         });
       }
       if (defaultsToAppend.length > 0) {
-        yield* writeConfigAtomically([...customConfig, ...defaultsToAppend]);
+        const updatedConfig = customConfig.map((entry) => {
+          const replacement = pendingLateDefaults.find(
+            (late) =>
+              late.replacementAlongside &&
+              defaultsToAppend.includes(late.rule) &&
+              isSameKeybindingRule(entry, late.alongside),
+          );
+          return replacement?.replacementAlongside ?? entry;
+        });
+        yield* writeConfigAtomically([...updatedConfig, ...defaultsToAppend]);
       }
       // A late default skipped at max entries stays pending for a later start.
       const settledLateDefaults = pendingLateDefaults.filter(

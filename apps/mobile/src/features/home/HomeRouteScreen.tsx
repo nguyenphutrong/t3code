@@ -1,5 +1,7 @@
 import { use } from "react";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
+import { SpacesControl } from "../spaces/SpacesControl";
+import { useSpaceEntities, useSpacePendingTasks } from "../../state/spaces";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import { useNavigation } from "@react-navigation/native";
@@ -38,14 +40,15 @@ export function HomeRouteScreen() {
   const columnMetrics = useNativeColumnLayoutMetrics();
   const headerWidth = nativePrimaryColumn ? (columnMetrics?.width ?? windowWidth) : windowWidth;
   const { layout, panes } = useAdaptiveWorkspaceLayout();
-  const projects = useProjects();
+  const allProjects = useProjects();
   // Streaming turns rewrite thread shells many times a second. While a Thread
   // covers Home, rebuilding this list is invisible work.
   const visible = useHomeRouteVisible();
-  const threads = useAtomValueWhileVisible(
+  const allThreads = useAtomValueWhileVisible(
     environmentThreadShells.navigationThreadShellsAtom,
     visible,
   );
+  const { projects, threads } = useSpaceEntities(allProjects, allThreads);
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const navigation = useNavigation();
@@ -85,7 +88,7 @@ export function HomeRouteScreen() {
     regenerateThreadTitle,
     unsettleThread,
   } = useThreadListActions();
-  const pendingTasks = usePendingNewTasks();
+  const pendingTasks = useSpacePendingTasks(usePendingNewTasks());
   const { openPendingTask, confirmDeletePendingTask } = usePendingTaskListActions();
   const environments = useMemo(() => {
     const connectionStateByEnvironmentId = new Map(
@@ -277,6 +280,7 @@ export function HomeRouteScreen() {
           selectedProjectKey={selectedProjectKey}
           threads={threads}
         />
+        <SpacesControl onSelectThread={handleSelectThread} />
       </>
     </AndroidHomeFabLayout>
   );

@@ -37,6 +37,7 @@ vi.mock("react", async (importOriginal) => ({
   useRef: (current: unknown) => ({ current }),
   useEffect: () => {},
 }));
+vi.mock("../hooks/spacesPersistence", () => ({ captureActiveSpace: () => null }));
 vi.mock("@tanstack/react-pacer", () => ({
   useDebouncedValue: (value: unknown) => [value, { state: { isPending: false } }],
 }));
@@ -193,7 +194,9 @@ describe("pull request worktree permissions", () => {
 
     expect(state.checkouts).toEqual(["worktree"]);
     expect(state.setupScripts).toBe(1);
-    expect(state.prepared).toEqual([{ branch: "feature/pr", worktreePath: "/worktree" }]);
+    expect(state.prepared).toEqual([
+      { branch: "feature/pr", worktreePath: "/worktree", spaceId: null },
+    ]);
   });
 
   it("rechecks task permission before invoking a retained worktree action", async () => {
@@ -211,7 +214,7 @@ describe("pull request worktree permissions", () => {
 
     expect(state.checkouts).toEqual(["local"]);
     expect(state.setupScripts).toBe(0);
-    expect(state.prepared).toEqual([{ branch: "feature/pr", worktreePath: null }]);
+    expect(state.prepared).toEqual([{ branch: "feature/pr", worktreePath: null, spaceId: null }]);
   });
 
   it.each(["Local", "Worktree"] as const)(
@@ -255,7 +258,7 @@ describe("pull request worktree permissions", () => {
     response.resolve(undefined);
     await completion;
 
-    expect(state.prepared).toEqual([{ branch: "feature/pr", worktreePath: null }]);
+    expect(state.prepared).toEqual([{ branch: "feature/pr", worktreePath: null, spaceId: null }]);
     expect(state.openChanges).toEqual([false]);
   });
 

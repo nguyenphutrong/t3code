@@ -1,3 +1,11 @@
+import { isThreadInSpace } from "@t3tools/client-runtime/state/spaces";
+import {
+  useSpaceEntities,
+  threadSpaceMenu,
+  isSpaceMenuAction,
+  runThreadSpaceAction,
+  reportSpaceError,
+} from "../hooks/useSpaces";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
@@ -88,12 +96,7 @@ import { isTerminalFocused } from "../lib/terminalFocus";
 import { isMacPlatform } from "../lib/utils";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
-import {
-  readThreadShell,
-  useProjects,
-  useThreadShells,
-  useThreadShellsForProjectRefs,
-} from "../state/entities";
+import { readThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useThreadDiscoveredPorts } from "../portDiscoveryState";
@@ -1280,7 +1283,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     },
   });
   const openPrLink = useOpenPrLink();
-  const sidebarThreads = useThreadShellsForProjectRefs(project.memberProjectRefs);
+  const spaces = useClientSettings((settings) => settings.spaces);
+  const projectThreadsInAllSpaces = useThreadShellsForProjectRefs(project.memberProjectRefs);
+  const sidebarThreads = useMemo(
+    () => projectThreadsInAllSpaces.filter((thread) => isThreadInSpace(spaces, thread)),
+    [projectThreadsInAllSpaces, spaces],
+  );
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
@@ -2326,6 +2334,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       );
       const clicked = await api.contextMenu.show(
         [
+          threadSpaceMenu(threadRef),
           ...(thread.branch
             ? [{ id: "new-thread-on-branch", label: `New thread on ${thread.branch}` }]
             : []),
@@ -2345,6 +2354,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         position,
       );
 
+      if (clicked && isSpaceMenuAction(clicked)) {
+        await runThreadSpaceAction(threadRef, clicked).catch(reportSpaceError);
+        return;
+      }
       if (clicked === "project-settings") {
         if (isMobile) setOpenMobile(false);
         void router.navigate({
@@ -3227,8 +3240,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 });
 
 export default function LegacySidebar() {
-  const projects = useProjects();
-  const sidebarThreads = useThreadShells();
+  const { projects, threads: sidebarThreads, spaces } = useSpaceEntities();
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
@@ -3720,6 +3732,10 @@ export default function LegacySidebar() {
     sidebarThreadByKey,
     threadJumpThreadKeys,
   ]);
+
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, spaces.activeSpaceId]);
 
   useEffect(() => {
     const onMouseDown = (event: globalThis.MouseEvent) => {

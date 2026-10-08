@@ -1,3 +1,5 @@
+import { assignProjectSpace } from "@t3tools/client-runtime/state/spaces";
+import { useMobileSpaces } from "../../state/spaces";
 import { MaterialListRow } from "../../components/MaterialListRow";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
@@ -690,6 +692,7 @@ function openNewTaskDraft(
 }
 
 function useCreateProject(environment: EnvironmentOption | null) {
+  const { state: spaces, update: updateSpaces } = useMobileSpaces();
   const navigation = useNavigation();
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
   const projects = useProjects();
@@ -739,6 +742,7 @@ function useCreateProject(environment: EnvironmentOption | null) {
         projectId,
         workspaceRoot,
       });
+      const creationSpaceId = spaces.activeSpaceId;
       const result = await createProject({
         environmentId: environment.environmentId,
         input: command,
@@ -746,6 +750,15 @@ function useCreateProject(environment: EnvironmentOption | null) {
       if (AsyncResult.isFailure(result)) {
         return result;
       }
+      updateSpaces((current) =>
+        creationSpaceId === null
+          ? current
+          : assignProjectSpace(
+              current,
+              { environmentId: environment.environmentId, projectId },
+              creationSpaceId,
+            ),
+      );
       navigation.dispatch(
         CommonActions.reset({
           index: 0,
@@ -763,7 +776,7 @@ function useCreateProject(environment: EnvironmentOption | null) {
       );
       return result;
     },
-    [createProject, environment, projects, navigation],
+    [createProject, environment, projects, navigation, updateSpaces, spaces.activeSpaceId],
   );
 }
 
@@ -1278,6 +1291,7 @@ export function AddProjectDestinationScreen(props: {
   const cloneRepository = useAtomCommand(sourceControlEnvironment.cloneRepository, {
     reportFailure: false,
   });
+  const { state: spaces, update: updateSpaces } = useMobileSpaces();
   const startProjectClone = useAtomCommand(sourceControlEnvironment.startProjectClone, {
     reportFailure: false,
   });
@@ -1335,6 +1349,7 @@ export function AddProjectDestinationScreen(props: {
       // draft screen shows progress and holds Start until the files land.
       const projectId = ProjectId.make(uuidv4());
       const title = inferProjectTitleFromPath(resolved.path);
+      const creationSpaceId = spaces.activeSpaceId;
       const startResult = await startProjectClone({
         environmentId: environment.environmentId,
         input: {
@@ -1348,6 +1363,15 @@ export function AddProjectDestinationScreen(props: {
       if (AsyncResult.isFailure(startResult)) {
         setError(errorMessage(Cause.squash(startResult.cause)));
       } else {
+        updateSpaces((current) =>
+          creationSpaceId === null
+            ? current
+            : assignProjectSpace(
+                current,
+                { environmentId: environment.environmentId, projectId },
+                creationSpaceId,
+              ),
+        );
         // The draft screen resolves its project from the client store, so it
         // must not open before the create event has arrived (it would fall
         // back to the project picker and lose the clone controls). Stay in
@@ -1398,6 +1422,8 @@ export function AddProjectDestinationScreen(props: {
     pathInput,
     remoteUrl,
     startProjectClone,
+    updateSpaces,
+    spaces.activeSpaceId,
   ]);
 
   return (
