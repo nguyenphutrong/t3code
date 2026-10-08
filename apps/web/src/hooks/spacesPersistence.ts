@@ -29,8 +29,13 @@ export function captureActiveSpace() {
   return getClientSettings().spaces.activeSpaceId;
 }
 
+// The project or thread already exists when these run, so a failed save only
+// toasts instead of rejecting and stopping the caller's create flow.
 export function assignCreatedProjectSpace(ref: ScopedProjectRef, spaceId: string | null) {
-  return updateSpaces((state) => assignProjectSpace(state, ref, spaceId));
+  return updateSpaces((state) => assignProjectSpace(state, ref, spaceId)).then(
+    () => undefined,
+    reportSpaceError,
+  );
 }
 
 export function assignCreatedThreadSpace(
@@ -44,7 +49,7 @@ export function assignCreatedThreadSpace(
       { environmentId: ref.environmentId, id: ref.threadId, projectId },
       spaceId,
     ),
-  );
+  ).then(() => undefined, reportSpaceError);
 }
 
 export function threadSpaceMenu(ref: ScopedThreadRef) {
