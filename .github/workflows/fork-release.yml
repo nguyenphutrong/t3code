@@ -1,6 +1,6 @@
 # Unsigned macOS build of the fork, published as a GitHub Release.
-# Push a tag like `fork-v0.0.46-spaces.1` from `dev`; the part after `fork-v`
-# becomes the app version. The build is branded "Oh My T3 Code" with its own
+# Push a tag like `v0.0.46-omt.1` from `dev`; the tag without its `v` becomes
+# the app version. The build is branded "Oh My T3 Code" with its own
 # bundle id (scripts/build-desktop-artifact.ts), so macOS privacy grants don't
 # collide with an installed upstream T3 Code.
 name: Fork Release
@@ -8,7 +8,7 @@ name: Fork Release
 on:
   push:
     tags:
-      - "fork-v*"
+      - "v*-omt.*"
 
 permissions:
   contents: write
@@ -40,11 +40,13 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      # Without GITHUB_REPOSITORY the build ships no update feed: an ad-hoc
+      # signed app cannot install updates on macOS anyway.
       - name: Build
         run: |
-          version="${GITHUB_REF_NAME#fork-v}"
+          version="${GITHUB_REF_NAME#v}"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$version"
+          env -u GITHUB_REPOSITORY node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$version"
 
       - name: Publish release
         env:
