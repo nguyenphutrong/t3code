@@ -29,6 +29,11 @@ workspace, and `mod+shift+g` for the Git branch. The workspace menu includes the
 current checkout, a new worktree, and the previous worktree when available.
 Use `mod+shift+l` to reuse the previous worktree directly.
 
+To change effort one step without opening the picker, bind
+**Composer: Increase Effort** and **Composer: Decrease Effort** in Keybindings.
+Both are unbound by default. Increase wraps from the highest level to the
+lowest, and decrease wraps from the lowest level to the highest.
+
 In the model picker, press Left in an empty search field or Shift+Tab to reach
 the provider list. Use Up/Down to move and Enter to choose. Right returns to
 model search. `mod+shift+up` and `mod+shift+down` switch providers directly and clear the
@@ -112,16 +117,24 @@ desktop app. `isMac` refers to the client keyboard's platform. Unknown keys eval
 
 `Ctrl+1` through `Ctrl+9` select the first nine Spaces. On desktop, `Cmd+1` through
 `Cmd+9` jump to threads on macOS; Windows and Linux use `Ctrl+Alt+1` through
-`Ctrl+Alt+9`. While the model picker is open, `mod+1` through `mod+9` select models.
-Thread and model jumps use `isDesktop` so they do not steal browser tab shortcuts.
-Browsers may also reserve `Ctrl+1` through `Ctrl+9`; customize the Space bindings
-in Settings when needed.
+`Ctrl+Alt+9`. While the model picker is open, `mod+1` through `mod+9` select models
+instead of threads. Thread and model jumps use `isDesktop` so they do not steal
+browser tab shortcuts. Browsers may also reserve `Ctrl+1` through `Ctrl+9`; customize
+the Space bindings in Settings when needed.
 
 Combine keys with `!` for not, `&&` for and, `||` for or, and parentheses:
 
 ```json
 { "key": "mod+j", "command": "terminal.toggle", "when": "terminalOpen && !terminalFocus" }
 ```
+
+## Find in the current thread
+
+`chat.find` searches conversation messages and proposed plans in the active thread. Entering a
+query searches the entire thread, including older messages. Thread search requires server support;
+update an older server to enable it. Select **Retry** if a search fails. It defaults to
+`mod+f` outside terminals and previews. Press **Enter** or **Shift+Enter** to move between matches,
+and **Escape** to close find.
 
 ## Precedence
 

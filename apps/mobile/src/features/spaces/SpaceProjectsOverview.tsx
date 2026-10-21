@@ -1,7 +1,7 @@
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { getMobileThemeRuntimeVariables } from "../../lib/mobileThemeVariables";
 import { normalizeMobileThemeId } from "../../lib/mobileTheme";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -15,8 +15,8 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-g
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { assignProjectSpace, resolveProjectSpace } from "@t3tools/client-runtime/state/spaces";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { useProjects } from "../../state/entities";
 import { useMobileSpaces } from "../../state/spaces";
@@ -35,18 +35,19 @@ function ProjectCard(props: {
   onMove: (point: Point) => void;
   onEnd: (point: Point, success: boolean) => void;
 }) {
-  const latest = useRef(props);
-  latest.current = props;
-  const gesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activateAfterLongPress(300)
-        .shouldCancelWhenOutside(false)
-        .runOnJS(true)
-        .onStart((event) => latest.current.onStart(event))
-        .onUpdate((event) => latest.current.onMove(event))
-        .onFinalize((event, success) => latest.current.onEnd(event, success)),
-    [],
+  // Gesture callbacks fire outside render, so effect events give them the
+  // latest props while the gesture object itself stays stable.
+  const onStart = useEffectEvent((point: Point) => props.onStart(point));
+  const onMove = useEffectEvent((point: Point) => props.onMove(point));
+  const onEnd = useEffectEvent((point: Point, success: boolean) => props.onEnd(point, success));
+  const [gesture] = useState(() =>
+    Gesture.Pan()
+      .activateAfterLongPress(300)
+      .shouldCancelWhenOutside(false)
+      .runOnJS(true)
+      .onStart((event) => onStart(event))
+      .onUpdate((event) => onMove(event))
+      .onFinalize((event, success) => onEnd(event, success)),
   );
   return (
     <GestureDetector gesture={gesture}>
